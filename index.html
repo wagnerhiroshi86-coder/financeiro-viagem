@@ -287,6 +287,8 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .leg-prev{display:flex;gap:14px;font-size:11.5px;color:var(--ink-2);margin:4px 0 0}
 .leg-prev i{display:inline-block;width:14px;height:8px;border-radius:3px;margin-right:5px;vertical-align:0}
 .secao{font-size:12.5px;font-weight:700;color:var(--ink-2);margin:16px 0 6px;display:flex;justify-content:space-between}
+/* filtros da lista: quebram linha em vez de rolar para o lado (todos ficam visíveis) */
+.bar-tools .chips{flex-wrap:wrap;overflow:visible}
 .toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:13.5px;opacity:0;transition:.2s;z-index:60;pointer-events:none}
 .toast.on{opacity:1;transform:translateX(-50%)}
 </style>
@@ -343,7 +345,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.3.1';
+const VERSAO_APP = '1.3.2';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
