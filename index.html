@@ -274,8 +274,12 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .ok-grande .ico{width:56px;height:56px;border-radius:50%;background:var(--ok-soft);color:var(--ok);display:grid;place-items:center;margin:0 auto 8px;font-size:28px}
 .fonte[data-verf]{cursor:pointer}
 .fonte .prev{font-size:11.5px;color:var(--warn);margin-top:4px}
-/* previsto: âmbar listrado, visível no tema claro e no escuro; o gasto fica por cima, sólido */
-.minibar i.prev,.bar i.prev{background:repeating-linear-gradient(135deg,var(--warn) 0 4px,color-mix(in srgb,var(--warn) 45%,transparent) 4px 8px);opacity:1}
+/* camadas da barra: estimado (azul listrado) < a pagar (âmbar listrado) < gasto (sólido, por cima) */
+:root{--pat-apagar:repeating-linear-gradient(135deg,var(--warn) 0 4px,color-mix(in srgb,var(--warn) 45%,transparent) 4px 8px);
+      --pat-est:repeating-linear-gradient(45deg,var(--est) 0 4px,color-mix(in srgb,var(--est) 40%,transparent) 4px 8px)}
+.minibar i.prev,.bar i.prev{background:var(--pat-apagar);opacity:1}
+.minibar i.est,.bar i.est{background:var(--pat-est);opacity:1}
+.fonte .prev .e{color:var(--est)}
 .wal .minibar{height:8px;border:1px solid var(--line)}
 .leg-prev{display:flex;gap:14px;font-size:11.5px;color:var(--ink-2);margin:4px 0 0}
 .leg-prev i{display:inline-block;width:14px;height:8px;border-radius:3px;margin-right:5px;vertical-align:0}
@@ -336,7 +340,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.2.1';
+const VERSAO_APP = '1.3.0';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -512,8 +516,10 @@ function previstoNaFonte(l, p, id){
 function carteira(p){
   const fontes = ((trav(p)||{}).fontes||[]).map(fo => {
     const gasto = S.lanc.filter(l => l.incluir && isReal(l) && l.por === p && l.fonte === fo.id).reduce((a,l) => a + saidaFonte(l, fo), 0);
-    const previsto = S.lanc.filter(l => previstoNaFonte(l, p, fo.id)).reduce((a,l) => a + saidaFonte(l, fo), 0);
-    return {fo, gasto, previsto, resta: fo.valor - gasto};
+    const prevs = S.lanc.filter(l => previstoNaFonte(l, p, fo.id));
+    const apagar = prevs.filter(l => l.status === 'apagar').reduce((a,l) => a + saidaFonte(l, fo), 0);
+    const estimado = prevs.filter(l => l.status === 'estimado').reduce((a,l) => a + saidaFonte(l, fo), 0);
+    return {fo, gasto, apagar, estimado, previsto: apagar + estimado, resta: fo.valor - gasto};
   });
   const noOrc = fo => fo.tipo !== 'credito' || fo.noOrcamento;
   const din = fontes.filter(x => noOrc(x.fo)), cred = fontes.filter(x => !noOrc(x.fo));
@@ -570,12 +576,12 @@ function cardCarteira(p){
     </div>
     ${c.fontes.map(x => { const ti = TIPO_F[x.fo.tipo] || TIPO_F.debito; const fs = x.fo.moeda === S.viagem.nativa.cod ? S.viagem.nativa.simb : S.viagem.local.simb;
       const usado = x.fo.valor ? Math.min(100, Math.max(0, x.gasto / x.fo.valor * 100)) : 0;
-      const comPrev = x.fo.valor ? Math.min(100, Math.max(0, (x.gasto + x.previsto) / x.fo.valor * 100)) : 0;
+      const pc = n => x.fo.valor ? Math.min(100, Math.max(0, n / x.fo.valor * 100)) : 0;
       return `<div class="fonte ${x.fo.tipo==='credito'?'cred':''}" data-verf="${p}|${x.fo.id}">${ic(ti.ic, x.fo.tipo==='especie'?'#2E7D4F':'#1D5C5D')}
-        <div><div class="n">${esc(x.fo.nome)} <span class="muted">›</span></div><div class="minibar"><i class="prev" style="width:${comPrev}%"></i><i style="width:${usado}%;background:${x.resta<0?'var(--bad)':'var(--brand-2)'}"></i></div>
-        ${x.previsto > 0.005 ? `<div class="prev num">previsto ${fmt(x.previsto, fs)}</div>` : ''}</div>
+        <div><div class="n">${esc(x.fo.nome)} <span class="muted">›</span></div><div class="minibar"><i class="est" style="width:${pc(x.gasto + x.apagar + x.estimado)}%"></i><i class="prev" style="width:${pc(x.gasto + x.apagar)}%"></i><i style="width:${usado}%;background:${x.resta<0?'var(--bad)':'var(--brand-2)'}"></i></div>
+        ${x.previsto > 0.005 ? `<div class="prev num">${x.apagar > 0.005 ? 'a pagar ' + fmt(x.apagar, fs) : ''}${x.apagar > 0.005 && x.estimado > 0.005 ? ' · ' : ''}${x.estimado > 0.005 ? `<span class="e">estimado ${fmt(x.estimado, fs)}</span>` : ''}</div>` : ''}</div>
         <div class="vals num"><b>${fmt(x.resta, fs)}</b>${x.fo.tipo==='credito'?'livre agora':'de '+fmt0(x.fo.valor, fs)}</div></div>`; }).join('')}
-    <div class="leg-prev"><span><i style="background:var(--brand-2)"></i>gasto</span><span><i style="background:repeating-linear-gradient(135deg,var(--warn) 0 4px,color-mix(in srgb,var(--warn) 45%,transparent) 4px 8px)"></i>previsto</span></div>
+    <div class="leg-prev"><span><i style="background:var(--brand-2)"></i>gasto</span><span><i style="background:var(--pat-apagar)"></i>a pagar</span><span><i style="background:var(--pat-est)"></i>estimado</span></div>
     <div class="hint">Toque numa fonte para ver as despesas pagas e previstas nela. Parte nos gastos = já gasto + a pagar no local + estimativas até o fim (sem o que foi pago antes de embarcar). Crédito só entra em "Levando" se estiver marcado para o orçamento da viagem.</div>
   </section>`;
 }
@@ -594,6 +600,7 @@ function abrirFonte(p, id){
   const cred = fo.tipo === 'credito';
   const pagos = S.lanc.filter(l => l.incluir && isReal(l) && l.por === p && l.fonte === id).sort((a,b) => b.dia - a.dia);
   const prev = S.lanc.filter(l => previstoNaFonte(l, p, id)).sort((a,b) => a.dia - b.dia);
+  const prevAp = prev.filter(l => l.status === 'apagar'), prevEst = prev.filter(l => l.status === 'estimado');
   const livre = fo.valor - x.gasto - x.previsto;
   const pct = n => fo.valor ? Math.min(100, Math.max(0, n / fo.valor * 100)) : 0;
   const linha = l => { const c2 = cat(l.cat), vf = saidaFonte(l, fo), outra = l.moeda !== fo.moeda;
@@ -602,17 +609,21 @@ function abrirFonte(p, id){
       <div class="v num">${fmt(vf, fs)}${outra ? `<small>${fmt(l.valor, l.moeda === v.nativa.cod ? v.nativa.simb : v.local.simb)}</small>` : ''}</div></div>`; };
   $('#sheetIn').innerHTML = `<div class="grab"></div><div class="shead"><h2>${esc(fo.nome)}</h2><button class="iconbtn" data-close><svg class="i"><use href="#i-x"/></svg></button></div>
     <div class="sub">${cred && fo.noOrcamento ? 'Crédito (no orçamento da viagem)' : ti.nome} · ${esc(nomeP(p))}</div>
-    <div class="bar"><i class="prev" style="width:${pct(x.gasto + x.previsto)}%"></i><i style="width:${pct(x.gasto)}%"${x.resta < 0 ? ' class="over"' : ''}></i></div>
-    <div class="kpis" style="grid-template-columns:1fr 1fr 1fr;margin-top:6px">
+    <div class="bar"><i class="est" style="width:${pct(x.gasto + x.apagar + x.estimado)}%"></i><i class="prev" style="width:${pct(x.gasto + x.apagar)}%"></i><i style="width:${pct(x.gasto)}%"${x.resta < 0 ? ' class="over"' : ''}></i></div>
+    <div class="leg-prev"><span><i style="background:var(--brand-2)"></i>${cred ? 'usado' : 'gasto'}</span><span><i style="background:var(--pat-apagar)"></i>a pagar</span><span><i style="background:var(--pat-est)"></i>estimado</span></div>
+    <div class="kpis" style="margin-top:8px">
       <div class="kpi"><div class="l">${cred ? 'Usado' : 'Gasto'}</div><div class="v num">${fmt0(x.gasto, fs)}</div></div>
-      <div class="kpi"><div class="l">Previsto</div><div class="v num">${fmt0(x.previsto, fs)}</div></div>
+      <div class="kpi"><div class="l">A pagar</div><div class="v num" style="color:var(--warn)">${fmt0(x.apagar, fs)}</div></div>
+      <div class="kpi"><div class="l">Estimado</div><div class="v num" style="color:var(--est)">${fmt0(x.estimado, fs)}</div></div>
       <div class="kpi"><div class="l">Após previstos</div><div class="v num" style="${livre < 0 ? 'color:var(--bad)' : ''}">${fmt0(livre, fs)}</div></div>
     </div>
     <div class="hint">${cred ? 'Limite' : 'Levando'}: ${fmt(fo.valor, fs)}. "Após previstos" = o que sobra depois de pagar também o que está previsto aqui.</div>
     <div class="secao"><span>Pagas com esta fonte (${pagos.length})</span><span class="num">${fmt(x.gasto, fs)}</span></div>
     ${pagos.map(linha).join('') || '<div class="hint">Nenhuma despesa paga com esta fonte ainda. Ao lançar, escolha esta fonte em "Pago com".</div>'}
-    <div class="secao"><span>Previstas nesta fonte (${prev.length})</span><span class="num">${fmt(x.previsto, fs)}</span></div>
-    ${prev.map(linha).join('') || '<div class="hint">Nenhuma despesa prevista. Numa reserva "A pagar" (ex.: hotel), abra o lançamento e escolha esta fonte em "Vai pagar com" para reservar o valor aqui.</div>'}
+    <div class="secao"><span>A pagar nesta fonte (${prevAp.length})</span><span class="num">${fmt(x.apagar, fs)}</span></div>
+    ${prevAp.map(linha).join('') || '<div class="hint">Nenhuma reserva a pagar marcada aqui. Numa reserva "A pagar" (ex.: hotel), abra o lançamento e escolha esta fonte em "Vai pagar com".</div>'}
+    <div class="secao"><span>Estimadas nesta fonte (${prevEst.length})</span><span class="num">${fmt(x.estimado, fs)}</span></div>
+    ${prevEst.map(linha).join('') || '<div class="hint">Nenhuma estimativa marcada aqui. Numa estimativa (ex.: combustível, compras planejadas), escolha esta fonte em "Vai pagar com".</div>'}
     <button class="btn ghost" id="fEdit" style="margin-top:14px">Editar fonte</button>`;
   abrirSheet();
   $('#fEdit').onclick = () => editarFonte(p, id);
