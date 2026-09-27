@@ -274,8 +274,11 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .ok-grande .ico{width:56px;height:56px;border-radius:50%;background:var(--ok-soft);color:var(--ok);display:grid;place-items:center;margin:0 auto 8px;font-size:28px}
 .fonte[data-verf]{cursor:pointer}
 .fonte .prev{font-size:11.5px;color:var(--warn);margin-top:4px}
-.minibar i.prev{background:var(--warn-soft)}
-.bar i.prev{background:var(--warn);opacity:.35}
+/* previsto: âmbar listrado, visível no tema claro e no escuro; o gasto fica por cima, sólido */
+.minibar i.prev,.bar i.prev{background:repeating-linear-gradient(135deg,var(--warn) 0 4px,color-mix(in srgb,var(--warn) 45%,transparent) 4px 8px);opacity:1}
+.wal .minibar{height:8px;border:1px solid var(--line)}
+.leg-prev{display:flex;gap:14px;font-size:11.5px;color:var(--ink-2);margin:4px 0 0}
+.leg-prev i{display:inline-block;width:14px;height:8px;border-radius:3px;margin-right:5px;vertical-align:0}
 .secao{font-size:12.5px;font-weight:700;color:var(--ink-2);margin:16px 0 6px;display:flex;justify-content:space-between}
 .toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:13.5px;opacity:0;transition:.2s;z-index:60;pointer-events:none}
 .toast.on{opacity:1;transform:translateX(-50%)}
@@ -333,7 +336,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.2.0';
+const VERSAO_APP = '1.2.1';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -572,6 +575,7 @@ function cardCarteira(p){
         <div><div class="n">${esc(x.fo.nome)} <span class="muted">›</span></div><div class="minibar"><i class="prev" style="width:${comPrev}%"></i><i style="width:${usado}%;background:${x.resta<0?'var(--bad)':'var(--brand-2)'}"></i></div>
         ${x.previsto > 0.005 ? `<div class="prev num">previsto ${fmt(x.previsto, fs)}</div>` : ''}</div>
         <div class="vals num"><b>${fmt(x.resta, fs)}</b>${x.fo.tipo==='credito'?'livre agora':'de '+fmt0(x.fo.valor, fs)}</div></div>`; }).join('')}
+    <div class="leg-prev"><span><i style="background:var(--brand-2)"></i>gasto</span><span><i style="background:repeating-linear-gradient(135deg,var(--warn) 0 4px,color-mix(in srgb,var(--warn) 45%,transparent) 4px 8px)"></i>previsto</span></div>
     <div class="hint">Toque numa fonte para ver as despesas pagas e previstas nela. Parte nos gastos = já gasto + a pagar no local + estimativas até o fim (sem o que foi pago antes de embarcar). Crédito só entra em "Levando" se estiver marcado para o orçamento da viagem.</div>
   </section>`;
 }
