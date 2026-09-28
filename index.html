@@ -312,6 +312,8 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .atualizar{background:#12302F}}
 .acerto .sub2{font-size:12px;color:var(--ink-3);margin-top:1px}
 .acerto .prevtag{font-size:10.5px;font-weight:700;color:var(--warn);background:var(--warn-soft);border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:2px}
+.acerto[data-dev]{cursor:pointer}
+.acerto[data-dev] .t::after{content:"›";color:var(--ink-3);margin-left:4px}
 .acerto-net{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--brand-soft);font-size:13.5px}
 .acerto-net b{font-size:15px}
 .toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:13.5px;opacity:0;transition:.2s;z-index:60;pointer-events:none}
@@ -370,7 +372,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.8.0';
+const VERSAO_APP = '1.8.1';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -629,6 +631,31 @@ function dividasPorDirecao(){
   }
   return Object.values(acc).filter(x => x.pago + x.prev >= 0.01).sort((a, b) => (b.pago + b.prev) - (a.pago + a.prev));
 }
+function contasDaDivida(de, para){
+  const m = UI.moedaVer, hoje = diaAtual(), out = [];
+  for (const l of ativos()) {
+    if (l.status === 'estimado' && l.dia >= 1 && l.dia < hoje) continue;
+    const d = dividaNoLanc(l).find(y => y.de === de && y.para === para); if (!d) continue;
+    const base = m === 'nativa' ? emNativa(l) : emLocal(l);
+    out.push({ l, v: base * d.v / l.valor, total: base });
+  }
+  return out.sort((a, b) => a.l.dia - b.l.dia);
+}
+function abrirDividas(de, para){
+  const sb = simbVer(), itens = contasDaDivida(de, para);
+  const pagos = itens.filter(x => isReal(x.l)), prev = itens.filter(x => !isReal(x.l));
+  const soma = a => a.reduce((t, x) => t + x.v, 0);
+  const linha = x => { const c = cat(x.l.cat);
+    return `<div class="item" data-id="${x.l.id}">${ic(c.icone, c.cor)}
+      <div><div class="t">${esc(x.l.desc)}</div><div class="m"><span class="st ${x.l.status}">${STN[x.l.status]}</span><span>${nomeDia(x.l.dia)}</span></div></div>
+      <div class="v num">${fmt(x.v, sb)}<small>de ${fmt(x.total, sb)}</small></div></div>`; };
+  $('#sheetIn').innerHTML = `<div class="grab"></div><div class="shead"><h2>${esc(nomeP(de))} deve a ${esc(nomeP(para))}</h2><button class="iconbtn" data-close><svg class="i"><use href="#i-x"/></svg></button></div>
+    <div class="acerto" style="margin:4px 0 2px">${av(de)}<svg class="i arrow"><use href="#i-arrow"/></svg>${av(para)}<div class="t">Total em aberto<b class="num">${fmt(soma(itens), sb)}</b></div></div>
+    <div class="hint">Em cada conta: em destaque, a parte de ${esc(nomeP(de))} que ${esc(nomeP(para))} pagou; abaixo, o total da conta. Toque numa conta para abrir.</div>
+    ${pagos.length ? `<div class="secao"><span>Já pago (${pagos.length})</span><span class="num">${fmt(soma(pagos), sb)}</span></div>${pagos.map(linha).join('')}` : ''}
+    ${prev.length ? `<div class="secao"><span>Previsto (${prev.length})</span><span class="num">${fmt(soma(prev), sb)}</span></div>${prev.map(linha).join('')}` : ''}`;
+  abrirSheet();
+}
 function acerto(){
   // saldo de cada um = o que pagou − a parte que lhe cabe; depois, transferências mínimas
   const m = UI.moedaVer, bal = {};
@@ -833,7 +860,7 @@ function telaPainel(){
     ${p==='t' ? cardDinheiroTodos() : cardCarteira(p)}
 
     ${p==='t' && S.viagem.viajantes.length > 1 ? `<section class="card"><h3>Acerto entre vocês <small>despesas divididas</small></h3>
-      ${dv.length ? dv.map(x => `<div class="acerto">${av(x.de)}<svg class="i arrow"><use href="#i-arrow"/></svg>${av(x.para)}
+      ${dv.length ? dv.map(x => `<div class="acerto" data-dev="${x.de}|${x.para}">${av(x.de)}<svg class="i arrow"><use href="#i-arrow"/></svg>${av(x.para)}
         <div class="t">${esc(nomeP(x.de))} deve a ${esc(nomeP(x.para))}${x.pago < 0.01 ? '<span class="prevtag">previsto</span>' : ''}<b class="num">${fmt(x.pago + x.prev, sb)}</b>${x.pago >= 0.01 && x.prev >= 0.01 ? `<div class="sub2 num">já pago ${fmt(x.pago, sb)} · previsto ${fmt(x.prev, sb)}</div>` : ''}</div></div>`).join('')
         + nets.map(n => `<div class="acerto-net">Para acertar: <b>${esc(nomeP(n.de))} transfere ${fmt(n.v, sb)} a ${esc(nomeP(n.para))}</b></div>`).join('')
         : '<div class="acerto"><div class="t"><b>Tudo acertado</b></div></div>'}
@@ -1178,6 +1205,7 @@ document.addEventListener('click', e => {
   if (q('.due')) return abrirForm(q('.due').dataset.id);
   if (q('[data-st]')) { UI.filtroStatus = q('[data-st]').dataset.st; return render(); }
   if (q('[data-clr]')) { if (q('[data-clr]').dataset.clr==='cat') UI.filtroCat=null; else UI.filtroDia=null; return render(); }
+  if (q('.acerto[data-dev]')) { const [de, para] = q('.acerto[data-dev]').dataset.dev.split('|'); return abrirDividas(de, para); }
   if (q('[data-divida]')) { const l = S.lanc.find(x => x.id === q('[data-divida]').dataset.divida); const sb = l.moeda === S.viagem.nativa.cod ? S.viagem.nativa.simb : S.viagem.local.simb;
     return toast(dividasVisiveis(l, UI.pessoa).map(d => `${nomeP(d.de)} deve ${fmt(d.v, sb)} a ${nomeP(d.para)} nesta conta`).join(' · ') + '. Entra no Acerto entre vocês.'); }
   if (q('[data-nopay]')) return toast('Meio de pagamento não definido. Abra o lançamento e escolha em "Vai pagar com".');
