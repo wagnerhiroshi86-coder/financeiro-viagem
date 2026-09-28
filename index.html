@@ -297,6 +297,10 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .pgrow .quem .av{width:24px;height:24px;font-size:11px}
 .pgrow .field{padding:9px 10px}
 .pgrow input.field{text-align:right}
+/* aviso "meio de pagamento não definido": nota de dólar com X vermelho */
+.nopay{display:inline-flex;align-items:center;cursor:pointer;padding:2px;margin:-2px 0;border-radius:6px}
+.nopay svg{width:27px;height:21px;display:block}
+.nopay:active{background:var(--bad-soft)}
 .toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:13.5px;opacity:0;transition:.2s;z-index:60;pointer-events:none}
 .toast.on{opacity:1;transform:translateX(-50%)}
 </style>
@@ -353,7 +357,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.5.0';
+const VERSAO_APP = '1.6.0';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -430,6 +434,11 @@ function diaAtual(){
 function pagtos(l){ return (l.pagamentos && l.pagamentos.length) ? l.pagamentos : [{ por:l.por, fonte:l.fonte, valor:l.valor }]; }
 function fonteObj(pg){ const v = trav(pg.por); return v && pg.fonte ? (v.fontes||[]).find(x => x.id === pg.fonte) || null : null; }
 function fonteDe(l){ return fonteObj(pagtos(l)[0]); }
+function semFormaPgto(l, p){
+  if (l.status === 'pago') return false;
+  return pagtos(l).filter(pg => p === 't' || pg.por === p).some(pg => !pg.fonte);
+}
+const ICONE_SEM_PGTO = `<svg viewBox="0 0 26 20" aria-hidden="true"><rect x="1.5" y="3.5" width="20" height="12" rx="2" fill="none" stroke="var(--ink-3)" stroke-width="1.6"/><circle cx="11.5" cy="9.5" r="2.6" fill="none" stroke="var(--ink-3)" stroke-width="1.6"/><path d="M15.5 9.5 24 18M24 9.5 15.5 18" stroke="var(--bad)" stroke-width="2.4" stroke-linecap="round"/></svg>`;
 function pgDe(l, p, id){ return pagtos(l).find(pg => pg.por === p && pg.fonte === id) || null; }
 // quantos R$ custa 1 unidade da moeda local, conforme a fonte usada
 function fatorNativa(fo){
@@ -815,7 +824,7 @@ function telaLista(){
       return `<div class="group"><div class="ghead"><span>${nomeDia(d)}</span><span class="num">${fmt(tot,sb)}</span></div>
       ${grupos[d].map(l=>{ const c=cat(l.cat); const v=val(l,p,UI.moedaVer); const vn = UI.moedaVer==='nativa'?emLocal(l)*parte(l,p):emNativa(l)*parte(l,p);
         return `<div class="item ${l.incluir?'':'off'}" data-id="${l.id}">${ic(c.icone,c.cor)}
-          <div><div class="t">${esc(l.desc)}</div>${l.obs && UI.busca ? `<div class="obs">${esc(l.obs)}</div>` : ''}<div class="m"><span class="st ${l.status}">${STN[l.status]}</span>${whoBadge(l)}<span>${esc(l.sub)}</span>${(!isReal(l) || (pagtos(l).length===1 && l.resp.length===1 && l.resp[0]===l.por)) ? '' : `<span class="pagopor">· ${pagtos(l).length > 1 ? 'pago por ' + pagtos(l).map(pg => esc(nomeP(pg.por))).join(' e ') : 'pago por ' + esc(nomeP(l.por))}</span>`}</div></div>
+          <div><div class="t">${esc(l.desc)}</div>${l.obs && UI.busca ? `<div class="obs">${esc(l.obs)}</div>` : ''}<div class="m"><span class="st ${l.status}">${STN[l.status]}</span>${whoBadge(l)}<span>${esc(l.sub)}</span>${semFormaPgto(l, p) ? `<span class="nopay" data-nopay title="Meio de pagamento não definido" aria-label="Meio de pagamento não definido">${ICONE_SEM_PGTO}</span>` : ''}${(!isReal(l) || (pagtos(l).length===1 && l.resp.length===1 && l.resp[0]===l.por)) ? '' : `<span class="pagopor">· ${pagtos(l).length > 1 ? 'pago por ' + pagtos(l).map(pg => esc(nomeP(pg.por))).join(' e ') : 'pago por ' + esc(nomeP(l.por))}</span>`}</div></div>
           <div class="v num">${fmt(v,sb)}<small>${fmt0(vn, UI.moedaVer==='nativa'?S.viagem.local.simb:S.viagem.nativa.simb)}</small></div></div>`;}).join('')}</div>`; }).join('')
       : `<div class="empty">Nenhum lançamento com esses filtros.</div>`}`;
 }
@@ -1114,6 +1123,7 @@ document.addEventListener('click', e => {
   if (q('.due')) return abrirForm(q('.due').dataset.id);
   if (q('[data-st]')) { UI.filtroStatus = q('[data-st]').dataset.st; return render(); }
   if (q('[data-clr]')) { if (q('[data-clr]').dataset.clr==='cat') UI.filtroCat=null; else UI.filtroDia=null; return render(); }
+  if (q('[data-nopay]')) return toast('Meio de pagamento não definido. Abra o lançamento e escolha em "Vai pagar com".');
   if (q('.item')) return abrirForm(q('.item').dataset.id);
   if (q('[data-close]') || t.id==='scrim') return fecharSheet();
   // formulário
