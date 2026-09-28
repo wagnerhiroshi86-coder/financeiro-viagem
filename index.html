@@ -284,6 +284,10 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .minibar i.est,.bar i.est{background:var(--pat-est);opacity:1}
 .fonte .prev .e{color:var(--est)}
 .wal .minibar{height:8px;border:1px solid var(--line)}
+.leg-prev[data-ajuda]{cursor:pointer;-webkit-user-select:none;user-select:none}
+.leg-prev[data-ajuda] span{padding:3px 0}
+.wal-ajuda{display:none}
+.wal-ajuda.on{display:block}
 .leg-prev{display:flex;gap:14px;font-size:11.5px;color:var(--ink-2);margin:4px 0 0}
 .leg-prev i{display:inline-block;width:14px;height:8px;border-radius:3px;margin-right:5px;vertical-align:0}
 .secao{font-size:12.5px;font-weight:700;color:var(--ink-2);margin:16px 0 6px;display:flex;justify-content:space-between}
@@ -384,7 +388,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.11.0';
+const VERSAO_APP = '1.11.1';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -786,9 +790,11 @@ function cardCarteira(p){
         <div><div class="n">${esc(x.fo.nome)} <span class="muted">›</span></div><div class="minibar seg">${barraFonte(x)}</div>
         ${x.apagar > 0.005 ? `<div class="prev num">a pagar ${fmt(x.apagar, fs)}</div>` : ''}${x.estimado > 0.005 ? `<div class="prev num"><span class="e">estimado ${fmt(x.estimado, fs)}</span></div>` : ''}</div>
         <div class="vals num"><b>${fmt(x.resta, fs)}</b>${x.fo.tipo==='credito'?'livre agora':'de '+fmt0(x.fo.valor, fs)}${x.previsto > 0.005 ? (() => { const pj = x.fo.valor - x.gasto - x.previsto; return `<div class="proj ${classeProj(x, pj)}"><small>projetado</small>${fmt(pj, fs)}</div>`; })() : ''}</div></div>`; }).join('')}
-    <div class="leg-prev"><span><i style="background:var(--brand-2)"></i>gasto</span><span><i style="background:var(--pat-apagar)"></i>a pagar</span><span><i style="background:var(--pat-est)"></i>estimado</span></div>
+    <div class="leg-prev" data-ajuda title="Toque para ver a explicação"><span><i style="background:var(--brand-2)"></i>gasto</span><span><i style="background:var(--pat-apagar)"></i>a pagar</span><span><i style="background:var(--pat-est)"></i>estimado</span></div>
+    <div class="wal-ajuda${UI.ajudaCarteira ? ' on' : ''}">
     <div class="hint" style="margin-top:4px">Saldo projetado (valor da fonte − a pagar − estimado): <b style="color:var(--warn)">âmbar</b> só a pagar · <b style="color:var(--est)">roxo</b> só estimado · <b style="color:var(--mix)">laranja</b> os dois · <b style="color:var(--bad)">vermelho</b> se ficar negativo.</div>
     <div class="hint">Toque numa fonte para ver as despesas pagas e previstas nela. Parte nos gastos = já gasto + a pagar no local + estimativas até o fim (sem o que foi pago antes de embarcar). Crédito só entra em "Levando" se estiver marcado para o orçamento da viagem.</div>
+    </div>
   </section>`;
 }
 function cardDinheiroTodos(){
@@ -1347,6 +1353,7 @@ document.addEventListener('click', e => {
   if (q('#novaCat')) return sheetTexto('Nova categoria', 'Nome da categoria', n => { S.categorias.push({id:'c'+Date.now().toString(36), nome:n, icone:'dots', cor:'#6B7280', subs:['Geral'], regra:'eu'}); save(); });
   // ajustes
   if (q('#btnSync') || q('#btnSync2')) return abrirSync();
+  if (q('.leg-prev[data-ajuda]')) { UI.ajudaCarteira = !UI.ajudaCarteira; document.querySelectorAll('.wal-ajuda').forEach(e => e.classList.toggle('on', UI.ajudaCarteira)); return; }
   if (q('[data-verf]')) { const [p, id] = q('[data-verf]').dataset.verf.split('|'); return abrirFonte(p, id); }
   if (q('[data-cart]')) return abrirCarteira(q('[data-cart]').dataset.cart);
   if (q('[data-irp]')) { UI.pessoa = q('[data-irp]').dataset.irp; return render(); }
