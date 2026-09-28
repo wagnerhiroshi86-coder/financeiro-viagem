@@ -396,7 +396,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.14.0';
+const VERSAO_APP = '1.15.0';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -1376,7 +1376,7 @@ document.addEventListener('click', e => {
   if (q('#swFotos')) return q('#swFotos').classList.toggle('on');
   if (q('#exp')) { baixarArquivo(arquivoDeDados($('#swFotos')?.classList.contains('on'), 'json')); return toast('Arquivo exportado'); }
   if (q('#compArq')) return compartilharArquivo();
-  if (q('#impBtn')) { MODO_IMP = 'juntar'; return $('#imp').click(); }
+  if (q('#impBtn')) return abrirJuntar();
   if (q('#abrirArq')) { if (confirm('Abrir outro arquivo substitui todos os dados deste aparelho. Exporte antes se quiser guardar. Continuar?')) { MODO_IMP = 'abrir'; $('#imp').click(); } return; }
   if (q('#apagarTudo')) { if (confirm('Apagar todos os dados deste aparelho? Isso não pode ser desfeito. Exporte antes se quiser guardar.')) { DB.apagar(); S = null; telaBoasVindas(); } return; }
 });
@@ -1466,7 +1466,7 @@ async function arquivoParaEnviar(){
   const quando = new Date().toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
   const pdf = await pdfDeDados(json, [
     'Financeiro da Viagem', 'Arquivo de sincronização: ' + S.viagem.nome, 'Enviado por ' + nomeP(S.aparelho) + ' em ' + quando, '',
-    'Para usar: no outro celular, abra o app Financeiro da Viagem,', 'vá em Ajustes, toque em Juntar arquivo e escolha este arquivo.', '',
+    'Para usar: no outro celular, abra o app Financeiro da Viagem, toque no botão', 'de sincronizar (as duas setas, no topo) e em Juntar arquivo recebido.', '',
     'Os dados da viagem estão guardados dentro deste arquivo.'
   ]);
   return new File([pdf], base.name.replace(/\.json$/, '.pdf'), { type: 'application/pdf' });
@@ -1475,7 +1475,7 @@ async function compartilharArquivo(){
   const file = await arquivoParaEnviar();
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     // só o arquivo: com título junto, o Quick Share da Samsung envia o título como texto e descarta o arquivo
-    try { await navigator.share({ files: [file] }); toast('No outro celular: Ajustes → Juntar arquivo'); }
+    try { await navigator.share({ files: [file] }); toast('No outro celular: sincronizar → Juntar arquivo recebido'); }
     catch(e){ if (e.name !== 'AbortError') { baixarArquivo(file); toast('Arquivo salvo em Downloads'); } }
   } else { baixarArquivo(file); toast('Arquivo salvo em Downloads'); }
 }
@@ -1530,11 +1530,32 @@ $('#imp').onchange = e => {
         L.ultimaSync[d.de] = { quando: Date.now(), nome: d.nomeDe || 'outro celular' };
       }
       save(); render();
-      toast((r.novos + r.atualizados + r.removidos ? `${r.novos} novo(s) · ${r.atualizados} atualizado(s) · ${r.removidos} removido(s)` : 'Nada novo para juntar')
-        + (deOutro ? '. Para concluir, sincronize por QR começando por ESTE celular.' : ''));
-    } catch(err){ toast('Arquivo inválido'); } };
+      const txtR = r.novos + r.atualizados + r.removidos ? `${r.novos} novo(s) · ${r.atualizados} atualizado(s) · ${r.removidos} removido(s)` : 'Nada novo para juntar';
+      if (!deOutro) return toast(txtR);
+      // arquivo de outro celular: mostra o resultado e já oferece o QR de conclusão (começando por este celular)
+      SYNC.meio = null;
+      $('#sheetIn').innerHTML = `<div class="grab"></div><div class="ok-grande"><div class="ico">✓</div><h2 style="margin:0 0 4px">Arquivo de ${esc(d.nomeDe || 'outro celular')} juntado</h2><p class="sub">${txtR}</p></div>
+        <div class="aviso-grande"><b>Para terminar:</b> faça uma sincronização rápida por QR começando por <b>este</b> celular. Assim o outro também recebe o que só existe aqui e os dois são conferidos.</div>
+        <button class="btn pri" id="syHost">Começar (mostrar meu código)</button>
+        <button class="btn ghost" data-close style="margin-top:8px">Agora não</button>`;
+      abrirSheet();
+      $('#syHost').onclick = async () => mostrarCodigo(await codificar(montarPacote(null)), 'host');
+    } catch(err){ toast('Arquivo inválido. Escolha o PDF recebido do outro celular.'); } };
   rd.readAsText(f); e.target.value='';
 };
+// antes de abrir o seletor do Android: explica onde o arquivo recebido costuma ficar
+function abrirJuntar(){
+  pararSync(); SYNC.meio = null;
+  $('#sheetIn').innerHTML = `<div class="grab"></div><div class="shead"><h2>Juntar arquivo recebido</h2><button class="iconbtn" data-close><svg class="i"><use href="#i-x"/></svg></button></div>
+    <p class="sub" style="margin:0 0 6px">Use o PDF que o outro celular enviou (nome parecido com <b>financeiro-${esc(S.viagem.nome.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))}-nome.pdf</b>).</p>
+    <div class="passo"><b>1</b><span>Toque em <b style="all:unset;font-weight:700">Escolher o arquivo</b>. Abre a lista de arquivos do celular.</span></div>
+    <div class="passo"><b>2</b><span>Veio pelo <b style="all:unset;font-weight:700">Quick Share</b>: procure em <b style="all:unset;font-weight:700">Recentes</b> ou na pasta <b style="all:unset;font-weight:700">Download › Quick Share</b>.</span></div>
+    <div class="passo"><b>3</b><span>Veio pelo <b style="all:unset;font-weight:700">WhatsApp</b>: antes, toque no arquivo na conversa para baixar; depois procure em <b style="all:unset;font-weight:700">Recentes</b>.</span></div>
+    <div class="passo"><b>4</b><span>Toque no PDF. O app junta os dados e mostra o que mudou; os lançamentos repetidos não duplicam.</span></div>
+    <button class="btn pri" id="jEscolher">Escolher o arquivo</button>`;
+  abrirSheet();
+  $('#jEscolher').onclick = () => { MODO_IMP = 'juntar'; $('#imp').click(); };
+}
 $('#scrim').onclick = fecharComAviso;
 
 /* ============ Sincronização por QR Code ============
@@ -1691,8 +1712,9 @@ function abrirSync(){
     <div class="passo"><b>3</b><span>O outro celular mostra o código dele. Aqui, toque em <b style="all:unset;font-weight:700">Ler a resposta</b>. Quem começa também termina; não precisa inverter.</span></div>
     <button class="btn pri" id="syHost">Começar (mostrar meu código)</button>
     <button class="btn ghost" id="syCli" style="margin-top:8px">Ler o código do outro</button>
-    <div class="hint" style="margin-top:12px">Muita coisa mudou desde a última vez (ex.: a primeira sincronização)? Use <b>Enviar (Quick Share)</b> e, no outro celular, <b>Juntar arquivo</b>.</div>
-    <button class="btn ghost" id="compArq" style="margin-top:8px">Enviar (Quick Share / WhatsApp)</button>`;
+    <div class="hint" style="margin-top:12px">Muita coisa mudou desde a última vez (ex.: a primeira sincronização)? Envie por arquivo e, no outro celular, toque em <b>Juntar arquivo recebido</b> aqui nesta tela.</div>
+    <button class="btn ghost" id="compArq" style="margin-top:8px">Enviar (Quick Share / WhatsApp)</button>
+    <button class="btn ghost" id="impBtn" style="margin-top:8px"><svg class="i" style="vertical-align:-4px"><use href="#i-down"/></svg> Juntar arquivo recebido (PDF)</button>`;
   abrirSheet();
   $('#syHost').onclick = async () => mostrarCodigo(await codificar(montarPacote(null)), 'host');
   $('#syCli').onclick = () => lerCodigo(async P => {
