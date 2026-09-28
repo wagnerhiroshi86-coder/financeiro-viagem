@@ -372,7 +372,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.9.0';
+const VERSAO_APP = '1.9.1';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -494,7 +494,7 @@ function descConv(fo){
 }
 function fmt(v, simb){ return simb + ' ' + (v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 const pct = x => (x||0).toLocaleString('pt-BR',{maximumFractionDigits:2});
-function fmt0(v, simb){ return simb + ' ' + Math.round(v||0).toLocaleString('pt-BR'); }
+function fmt0(v, simb){ return fmt(v, simb); } // valores sempre com centavos exatos
 function emNativa(l){
   if (l.fatura) return l.fatura;
   if (l.moeda === S.viagem.nativa.cod) return l.valor;
@@ -689,7 +689,7 @@ function acerto(){
   const out = []; let i = 0, j = 0;
   while (i < dev.length && j < cre.length){
     const x = Math.min(dev[i][1], cre[j][1]);
-    if (x >= 0.5) out.push({de: dev[i][0], para: cre[j][0], v: x});
+    if (x >= 0.005) out.push({de: dev[i][0], para: cre[j][0], v: x});
     dev[i][1] -= x; cre[j][1] -= x;
     if (dev[i][1] < 0.005) i++; if (cre[j][1] < 0.005) j++;
   }
@@ -703,7 +703,7 @@ function cardCarteira(p){
   if (!c.fontes.length) return `<section class="card wal"><h3>Carteira de ${nome}</h3>
     <p class="sub" style="margin:0 0 12px">Cadastre quanto dinheiro ${nome} está levando (espécie, cartões de débito, conta global) para saber se vai sobrar ou faltar.</p>
     <button class="btn ghost" data-cart="${p}">+ Cadastrar dinheiro da viagem</button></section>`;
-  const ok = c.folga >= -0.5;
+  const ok = c.folga >= -0.005;
   const cobreCred = !ok && c.credDisp >= -c.folga;
   return `<section class="card wal"><h3>Carteira de ${nome} <button class="linkbtn" data-cart="${p}">Editar</button></h3>
     <div class="st-big ${ok?'ok':'bad'}"><div><span>${ok?'Orçamento folgado: vai sobrar':'Vai faltar dinheiro'}</span><b class="num">${fmt(Math.abs(c.folga), sb)}</b></div>
@@ -728,7 +728,7 @@ function cardDinheiroTodos(){
   const sb = simbVer();
   return `<section class="card"><h3>Dinheiro para a viagem <small>toque para ver a carteira</small></h3>
     ${S.viagem.viajantes.map(v => { const c = carteira(v.id);
-      const tag = !c.fontes.length ? '<span class="tag nd">não cadastrado</span>' : c.folga >= -0.5 ? `<span class="tag ok num">sobra ${fmt0(c.folga, sb)}</span>` : `<span class="tag bad num">faltam ${fmt0(-c.folga, sb)}</span>`;
+      const tag = !c.fontes.length ? '<span class="tag nd">não cadastrado</span>' : c.folga >= -0.005 ? `<span class="tag ok num">sobra ${fmt0(c.folga, sb)}</span>` : `<span class="tag bad num">faltam ${fmt0(-c.folga, sb)}</span>`;
       return `<div class="pessoa-din" data-irp="${v.id}">${av(v.id)}<span class="x">${esc(v.nome)}</span>${tag}</div>`; }).join('')}
   </section>`;
 }
@@ -867,7 +867,7 @@ function telaPainel(){
       </div>
       <div class="bar"><i style="width:${pct}%"></i></div>
       <div class="legend"><span>Já pago/gasto <b class="num">${fmt0(t.real,sb)}</b></span><span>Falta <b class="num">${fmt0(t.falta,sb)}</b></span></div>
-      <div class="plan-line">Planejado <b class="num">${fmt0(t.plano,sb)}</b> · <span class="${dif>0.5?'up':'down'}">${Math.abs(dif)<0.5?'dentro do plano':(dif>0?'acima ':'abaixo ')+fmt0(Math.abs(dif),sb)+' ('+(dif>0?'+':'')+difPct.toFixed(1).replace('.',',')+'%)'}</span></div>
+      <div class="plan-line">Planejado <b class="num">${fmt0(t.plano,sb)}</b> · <span class="${dif>0.005?'up':'down'}">${Math.abs(dif)<0.005?'dentro do plano':(dif>0?'acima ':'abaixo ')+fmt0(Math.abs(dif),sb)+' ('+(dif>0?'+':'')+difPct.toFixed(2).replace('.',',')+'%)'}</span></div>
       <div class="kpis">
         ${naViagem ? `<div class="kpi"><div class="l">Gasto de hoje</div><div class="v num">${fmt0(dias[hoje-1]?.real||0,sb)}</div><div class="a">planejado ${fmt0(dias[hoje-1]?.plano||0,sb)}</div></div>`
           : `<div class="kpi"><div class="l">Já pago antes de embarcar</div><div class="v num">${fmt0(t.real,sb)}</div><div class="a">passagens, reservas e ingressos</div></div>`}
@@ -885,7 +885,7 @@ function telaPainel(){
       <div class="hint">Soma, conta a conta, o que cada um pagou a mais que a sua parte. "Previsto" = contas estimadas ou a pagar; "já pago" = contas pagas.</div></section>` : ''}
 
     <section class="card"><h3>Por categoria <small>planejado × gasto</small></h3>
-      ${cats.map(x=>{ const ref=Math.max(x.plano,x.orc||0,1); const over=x.real>x.plano+0.5;
+      ${cats.map(x=>{ const ref=Math.max(x.plano,x.orc||0,1); const over=x.real>x.plano+0.005;
         return `<div class="catrow" data-cat="${x.c.id}">${ic(x.c.icone,x.c.cor)}
           <div><div class="n">${esc(x.c.nome)}</div>
           <div class="minibar"><i style="width:${Math.min(100,x.plano/ref*100)}%;background:${x.c.cor}33"></i><i style="width:${Math.min(100,x.real/ref*100)}%;background:${over?'var(--bad)':x.c.cor}"></i></div></div>

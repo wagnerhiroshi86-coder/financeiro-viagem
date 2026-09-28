@@ -1,6 +1,6 @@
 // Service worker: guarda o app no aparelho para funcionar sem internet.
 // Ao publicar uma versão nova, troque o número em CACHE para o celular baixar os arquivos novos.
-const CACHE = 'finviagem-v1.9.0';
+const CACHE = 'finviagem-v1.9.1';
 const ARQUIVOS = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'lib/qrcode.js', 'lib/jsQR.js'];
 
 self.addEventListener('install', e => {
