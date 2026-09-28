@@ -261,7 +261,15 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .syncbtn{border:0;background:rgba(255,255,255,.14);color:#fff;width:36px;height:34px;border-radius:10px;display:grid;place-items:center;cursor:pointer;flex:none}
 .top-row .dir{display:flex;gap:8px;align-items:center}
 .qrbox{background:#fff;border-radius:16px;padding:12px;display:flex;justify-content:center;margin:12px auto 6px;max-width:340px}
-.qrbox canvas{width:100%;max-width:316px;height:auto;image-rendering:pixelated}
+.qrbox canvas{width:auto;max-width:100%;height:auto;image-rendering:pixelated}
+.qrctl{display:flex;justify-content:center;gap:8px;margin:6px 0 2px}
+.qrctl button{border:0;background:var(--surface-2);color:var(--ink);border-radius:10px;padding:8px 14px;font-weight:700;cursor:pointer;min-width:52px}
+.pontos{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;margin:8px 0 2px}
+.pontos i{width:10px;height:10px;border-radius:3px;background:var(--line)}
+.pontos i.ok{background:var(--ok)}
+.pontos i.at{outline:2px solid var(--brand-2);outline-offset:1px}
+.aviso-grande{background:var(--warn-soft);color:var(--ink);border-radius:12px;padding:10px 12px;font-size:13px;margin:8px 0}
+.aviso-grande b{color:var(--warn)}
 .qrinfo{text-align:center;font-size:12.5px;color:var(--ink-2);min-height:18px}
 .passo{display:flex;gap:10px;align-items:flex-start;font-size:14px;margin:8px 0}
 .passo b{flex:none;width:24px;height:24px;border-radius:50%;background:var(--brand-soft);color:var(--brand-2);display:grid;place-items:center;font-size:12.5px}
@@ -351,7 +359,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 <div class="sheet" id="sheet"><div class="in" id="sheetIn"></div></div>
 <div class="toast" id="toast"></div>
 <input type="file" id="cam" accept="image/*" capture="environment" hidden>
-<input type="file" id="imp" accept=".json,application/json" hidden>
+<input type="file" id="imp" accept=".json,.txt,application/json,text/plain" hidden>
 
 <svg width="0" height="0" style="position:absolute">
   <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v12h14V9"/><path d="M10 21v-6h4v6"/></symbol>
@@ -388,7 +396,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.11.1';
+const VERSAO_APP = '1.12.0';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -1059,7 +1067,7 @@ function telaAjustes(){
     </div>
     <div class="card"><h3>Juntar por arquivo (alternativa)</h3>
       <p class="sub" style="margin:0 0 12px">Exporte o arquivo e envie ao outro celular (WhatsApp, Drive). Lá, toque em "Juntar arquivo": os lançamentos novos entram e os repetidos não duplicam.</p>
-      <div class="row2"><button class="btn ghost" id="exp"><svg class="i" style="vertical-align:-4px"><use href="#i-down"/></svg> Exportar</button><button class="btn ghost" id="impBtn"><svg class="i" style="vertical-align:-4px"><use href="#i-sync"/></svg> Juntar arquivo</button></div>
+      <div class="row2"><button class="btn ghost" id="compArq">Enviar (Quick Share)</button><button class="btn ghost" id="exp"><svg class="i" style="vertical-align:-4px"><use href="#i-down"/></svg> Exportar</button><button class="btn ghost" id="impBtn"><svg class="i" style="vertical-align:-4px"><use href="#i-sync"/></svg> Juntar arquivo</button></div>
       <div class="toggle"><div class="k">Incluir fotos dos recibos no arquivo<small class="muted" style="display:block;font-size:12px">Deixa o arquivo maior</small></div><button class="sw" id="swFotos"></button></div>
     </div>
     <div class="card"><h3>Dados deste aparelho</h3>
@@ -1366,15 +1374,8 @@ document.addEventListener('click', e => {
   if (q('[data-cor-p]')) { const v = trav(q('[data-cor-p]').dataset.corP); const i = CORES_P.indexOf(v.cor); v.cor = CORES_P[(i+1) % CORES_P.length]; save(); return render(); }
   if (q('[data-rm-p]')) return removerViajante(q('[data-rm-p]').dataset.rmP);
   if (q('#swFotos')) return q('#swFotos').classList.toggle('on');
-  if (q('#exp')) {
-    const incluirFotos = $('#swFotos')?.classList.contains('on');
-    const {local, ...semLocal} = S;
-    const dados = {...semLocal, formato:'finviagem', versao:1, exportado:new Date().toISOString(), lanc: S.lanc.map(l => incluirFotos ? l : {...l, foto:null})};
-    const blob = new Blob([JSON.stringify(dados,null,1)],{type:'application/json'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = `financeiro-${S.viagem.nome.replace(/\s+/g,'-').toLowerCase()}-${nomeP(S.aparelho).toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g,'-')}.json`; a.click();
-    return toast('Arquivo exportado');
-  }
+  if (q('#exp')) { baixarArquivo(arquivoDeDados($('#swFotos')?.classList.contains('on'), 'json')); return toast('Arquivo exportado'); }
+  if (q('#compArq')) return compartilharArquivo();
   if (q('#impBtn')) { MODO_IMP = 'juntar'; return $('#imp').click(); }
   if (q('#abrirArq')) { if (confirm('Abrir outro arquivo substitui todos os dados deste aparelho. Exporte antes se quiser guardar. Continuar?')) { MODO_IMP = 'abrir'; $('#imp').click(); } return; }
   if (q('#apagarTudo')) { if (confirm('Apagar todos os dados deste aparelho? Isso não pode ser desfeito. Exporte antes se quiser guardar.')) { DB.apagar(); S = null; telaBoasVindas(); } return; }
@@ -1416,6 +1417,25 @@ $('#cam').onchange = e => {
   rd.readAsDataURL(f); e.target.value='';
 };
 let MODO_IMP = 'juntar';
+// arquivo com todos os dados + quem gerou e até quando (a junção usa isso para não reenviar tudo depois pelo QR)
+function arquivoDeDados(incluirFotos, ext){
+  const {local, ...semLocal} = S;
+  const dados = {...semLocal, formato:'finviagem', versao:1, exportado:new Date().toISOString(),
+    de: meuDisp(), nomeDe: nomeP(S.aparelho), ts: Date.now(), acks: {...S.local.recebido},
+    lanc: S.lanc.map(l => incluirFotos ? l : {...l, foto:null})};
+  const slug = t => String(t).toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  const nome = `financeiro-${slug(S.viagem.nome)}-${slug(nomeP(S.aparelho))}.${ext}`;
+  return new File([JSON.stringify(dados)], nome, { type: ext === 'txt' ? 'text/plain' : 'application/json' });
+}
+function baixarArquivo(file){ const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; a.click(); }
+// Quick Share / WhatsApp / Drive: o Android só compartilha alguns tipos a partir da web, por isso .txt
+async function compartilharArquivo(){
+  const file = arquivoDeDados(false, 'txt');
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'Financeiro da Viagem' }); toast('No outro celular: Ajustes → Juntar arquivo'); }
+    catch(e){ if (e.name !== 'AbortError') { baixarArquivo(file); toast('Arquivo salvo em Downloads'); } }
+  } else { baixarArquivo(file); toast('Arquivo salvo em Downloads'); }
+}
 function juntar(d, origem = 'arquivo'){
   const agora = Date.now();
   let novos = 0, atualizados = 0, removidos = 0;
@@ -1458,8 +1478,16 @@ $('#imp').onchange = e => {
         delete d.local; S = normalizar(d); S.aparelho = null; UI.pessoa = 't'; UI.tab = 'painel'; save(); iniciar(); perguntarDono(); return;
       }
       normalizar(d);
-      const r = juntar(d); save(); render();
-      toast(r.novos + r.atualizados + r.removidos ? `${r.novos} novo(s) · ${r.atualizados} atualizado(s) · ${r.removidos} removido(s)` : 'Nada novo para juntar');
+      const deOutro = d.de && d.de !== meuDisp();
+      const r = juntar(d, deOutro ? d.de : 'arquivo');
+      if (deOutro && d.ts) {
+        const L = S.local; L.recebido[d.de] = Math.max(L.recebido[d.de] || 0, d.ts);
+        const ack = d.acks && d.acks[meuDisp()]; if (ack) L.enviadoOk[d.de] = Math.max(L.enviadoOk[d.de] || 0, ack);
+        L.ultimaSync[d.de] = { quando: Date.now(), nome: d.nomeDe || 'outro celular' };
+      }
+      save(); render();
+      toast((r.novos + r.atualizados + r.removidos ? `${r.novos} novo(s) · ${r.atualizados} atualizado(s) · ${r.removidos} removido(s)` : 'Nada novo para juntar')
+        + (deOutro ? '. Para concluir, sincronize por QR começando por ESTE celular.' : ''));
     } catch(err){ toast('Arquivo inválido'); } };
   rd.readAsText(f); e.target.value='';
 };
@@ -1472,10 +1500,38 @@ $('#scrim').onclick = fecharSheet;
    3) HOST lê P2 e junta. Cada pacote leva "ack": até que hora (do relógio do outro) já foi recebido,
       assim cada lado sabe o que o outro já tem e envia só o que falta.
    ================================================== */
-const SYNC = { timer:null, stream:null, loop:null };
+const SYNC = { timer:null, stream:null, loop:null, lock:null };
 function meuDisp(){
   try { let d = localStorage.getItem('finviagem-disp'); if (!d) { d = 'd' + Math.random().toString(36).slice(2, 10); localStorage.setItem('finviagem-disp', d); } return d; }
   catch(e){ S.local.disp ||= 'd' + Math.random().toString(36).slice(2, 10); return S.local.disp; }
+}
+// chaves curtas no QR (o pacote fica bem menor); expandir() desfaz
+const CHAVE = {id:'i',desc:'d',cat:'c',sub:'s',valor:'v',moeda:'m',dia:'y',status:'t',resp:'r',partes:'q',pagamentos:'g',por:'p',fonte:'f',fatura:'x',incluir:'n',obs:'o',upd:'u'};
+const CHAVE_INV = Object.fromEntries(Object.entries(CHAVE).map(([a, b]) => [b, a]));
+const ST_C = {estimado:'E', apagar:'A', pago:'P', realizado:'R'}, ST_INV = {E:'estimado', A:'apagar', P:'pago', R:'realizado'};
+function compactar(l){
+  const o = {};
+  for (const [k, v] of Object.entries(l)) {
+    if (k === 'foto' || k === 'loc' || k === 'via' || v === null || v === '' || v === undefined) continue;
+    if (k === 'incluir' && v === true) continue;
+    if (k === 'moeda' && v === S.viagem.local.cod) continue;
+    let x = v;
+    if (k === 'status') x = ST_C[v] || v;
+    if (k === 'pagamentos') x = v.map(pg => [pg.por, pg.fonte || 0, pg.valor]);
+    o[CHAVE[k] || k] = x;
+  }
+  return o;
+}
+function expandir(o){
+  const l = {};
+  for (const [k, v] of Object.entries(o)) {
+    const kk = CHAVE_INV[k] || k; let x = v;
+    if (kk === 'status') x = ST_INV[v] || v;
+    if (kk === 'pagamentos') x = v.map(a => ({ por: a[0], fonte: a[1] || null, valor: a[2] }));
+    l[kk] = x;
+  }
+  l.moeda ??= S.viagem.local.cod; l.incluir ??= true;
+  return l;
 }
 function enxugar(l){ const o = {}; for (const [k, v] of Object.entries(l)) { if (k === 'foto' || k === 'loc' || k === 'via') continue; if (v === null || v === '' || v === undefined) continue; o[k] = v; } return o; }
 function hashTxt(t){ let h = 5381; for (let i = 0; i < t.length; i++) h = (h * 33 + t.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
@@ -1485,21 +1541,23 @@ function montarPacote(peer){
   if (!peer && Object.keys(L.recebido).length === 1) peer = Object.keys(L.recebido)[0];
   const conhecidos = Object.keys(L.enviadoOk);
   const desde = peer ? (L.enviadoOk[peer] || 0) : (conhecidos.length ? Math.min(...conhecidos.map(k => L.enviadoOk[k])) : 0);
-  const lanc = S.lanc.filter(l => (l.loc || 0) > desde && (!peer || l.via !== peer)).map(enxugar);
+  const lanc = S.lanc.filter(l => (l.loc || 0) > desde && (!peer || l.via !== peer)).map(compactar);
   const exc = {};
   for (const [id, x] of Object.entries(L.excLoc)) if (x.loc > desde && (!peer || x.via !== peer)) exc[id] = S.excluidos[id] || x.loc;
-  // viajantes/carteiras e categorias só vão quando diferem do que o outro tinha na última vez
-  const vh = hashTxt(JSON.stringify([S.viagem.viajantes, S.categorias]));
-  L.hashOutro ||= {};
-  const alvo = peer ? [peer] : Object.keys(L.hashOutro);
-  const mandarEstrutura = !alvo.length || alvo.some(p => L.hashOutro[p] !== vh);
-  return { t:'fvs', v:1, viagem:S.viagem.id, de:eu, nome:nomeP(S.aparelho), ts:Date.now(), acks:{...L.recebido}, vh,
+  // viajantes/carteiras e categorias só vão se mudaram desde a última vez que o outro CONFIRMOU ter recebido
+  const vh = hashTxt(JSON.stringify([S.viagem.viajantes, S.categorias])), ts = Date.now();
+  L.estrEnviada ||= {};
+  const e = peer ? L.estrEnviada[peer] : null;
+  const mandarEstrutura = !(e && e.hash === vh && (L.enviadoOk[peer] || 0) >= e.ts);
+  if (mandarEstrutura && peer) L.estrEnviada[peer] = { hash: vh, ts };
+  return { t:'fvs', v:2, viagem:S.viagem.id, de:eu, nome:nomeP(S.aparelho), ts, acks:{...L.recebido}, vh,
     lanc, exc, ...(mandarEstrutura ? { via:S.viagem.viajantes, cats:S.categorias } : {}) };
 }
 function aplicarPacote(P){
   if (!P || P.t !== 'fvs') throw new Error('Código não reconhecido');
   if (P.viagem !== S.viagem.id) throw new Error('Este código é de outra viagem');
   if (P.de === meuDisp()) throw new Error('Este é o código deste próprio celular');
+  if (P.v === 2) P.lanc = P.lanc.map(expandir);
   for (const l of P.lanc) { l.partes ??= null; l.obs ??= ''; l.fatura ??= null; l.fonte ??= null; l.pagamentos ??= null; l.foto = null; l.incluir ??= true; }
   const r = juntar({ lanc:P.lanc, excluidos:P.exc, viagem:{viajantes:P.via || []}, categorias:P.cats || [] }, P.de);
   const L = S.local;
@@ -1511,41 +1569,55 @@ function aplicarPacote(P){
   save(); render();
   return r;
 }
-// pacote → partes de texto para QR (JSON → deflate → base64 → pedaços)
-const TAM_PARTE = 600;
+// pacote → partes para QR: JSON → deflate → base45 (modo alfanumérico do QR, ~25% mais compacto) → pedaços
+// Cada parte: "FV2:SESS:i:n:dados". Pedaços pequenos (249 caracteres) = QR com pontos grandes, fácil de ler.
+const B45 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
+const TAM_PARTE = 249; // múltiplo de 3 (cada 2 bytes viram 3 caracteres)
+function b45enc(b){ let t = ''; for (let i = 0; i < b.length; i += 2) { if (i + 1 < b.length) { const n = b[i] * 256 + b[i + 1]; t += B45[n % 45] + B45[Math.floor(n / 45) % 45] + B45[Math.floor(n / 2025)]; } else { const n = b[i]; t += B45[n % 45] + B45[Math.floor(n / 45)]; } } return t; }
+function b45dec(t){ const out = []; for (let i = 0; i < t.length; i += 3) { const c = B45.indexOf(t[i]), d = B45.indexOf(t[i + 1]);
+  if (c < 0 || d < 0) throw new Error('Código inválido');
+  if (i + 2 < t.length) { const e = B45.indexOf(t[i + 2]); if (e < 0) throw new Error('Código inválido'); const n = c + d * 45 + e * 2025; out.push(n >> 8, n & 255); } else out.push(c + d * 45); }
+  return new Uint8Array(out); }
 async function codificar(P){
   const bytes = new Uint8Array(await new Response(new Blob([JSON.stringify(P)]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer());
-  let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-  const b64 = btoa(bin), sid = Math.random().toString(36).slice(2, 6), n = Math.max(1, Math.ceil(b64.length / TAM_PARTE));
-  return Array.from({length:n}, (_, i) => `FV1|${sid}|${i + 1}|${n}|${b64.slice(i * TAM_PARTE, (i + 1) * TAM_PARTE)}`);
+  const txt = b45enc(bytes), n = Math.max(1, Math.ceil(txt.length / TAM_PARTE));
+  let sid = ''; for (let i = 0; i < 4; i++) sid += '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 36)];
+  return Array.from({length:n}, (_, i) => `FV2:${sid}:${i + 1}:${n}:${txt.slice(i * TAM_PARTE, (i + 1) * TAM_PARTE)}`);
 }
-async function decodificar(pedacos){
-  const bin = atob(pedacos.join('')), bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return JSON.parse(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text());
+async function descomprimir(bytes){ return JSON.parse(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text()); }
+async function decodificar(pedacos, versao){
+  if (versao === 1) { const bin = atob(pedacos.join('')), bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); return descomprimir(bytes); }
+  return descomprimir(b45dec(pedacos.join('')));
 }
 function desenharQR(canvas, texto){
-  const qr = qrcode(0, 'L'); qr.addData(texto, 'Byte'); qr.make();
-  const n = qr.getModuleCount(), borda = 4, px = Math.max(3, Math.floor(316 / (n + borda * 2)));
+  const qr = qrcode(0, 'M'); qr.addData(texto, /^[0-9A-Z $%*+\-./:]*$/.test(texto) ? 'Alphanumeric' : 'Byte'); qr.make();
+  const n = qr.getModuleCount(), borda = 4;
+  const alvo = Math.min(380, (document.getElementById('sheetIn')?.clientWidth || 360) - 56);
+  const px = Math.max(3, Math.floor(alvo / (n + borda * 2)));
   canvas.width = canvas.height = (n + borda * 2) * px;
   const g = canvas.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, canvas.width, canvas.height); g.fillStyle = '#000';
   for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) g.fillRect((c + borda) * px, (r + borda) * px, px, px);
 }
+async function manterTelaAcesa(){ try { if ('wakeLock' in navigator && !SYNC.lock) SYNC.lock = await navigator.wakeLock.request('screen'); } catch(e){} }
 function pararSync(){
   clearInterval(SYNC.timer); SYNC.timer = null; cancelAnimationFrame(SYNC.loop); SYNC.loop = null;
   if (SYNC.stream) { SYNC.stream.getTracks().forEach(t => t.stop()); SYNC.stream = null; }
+  if (SYNC.lock) { SYNC.lock.release().catch(() => {}); SYNC.lock = null; }
 }
 function resumo(r){ return r.novos + r.atualizados + r.removidos ? `${r.novos} novo(s) · ${r.atualizados} atualizado(s) · ${r.removidos} removido(s)` : 'nenhuma mudança nova'; }
+const PARTES_GRANDE = 8; // acima disso, sugere enviar por arquivo
 
 function abrirSync(){
   pararSync();
   $('#sheetIn').innerHTML = `<div class="grab"></div><div class="shead"><h2>Sincronizar celulares</h2><button class="iconbtn" data-close><svg class="i"><use href="#i-x"/></svg></button></div>
     <p class="sub" style="margin:0 0 6px">Os dois celulares lado a lado, com o app aberto. Não precisa de internet.</p>
     <div class="passo"><b>1</b><span>Neste celular, toque em <b style="all:unset;font-weight:700">Começar</b>. Ele mostra um QR Code.</span></div>
-    <div class="passo"><b>2</b><span>No outro, toque em <b style="all:unset;font-weight:700">Ler o código do outro</b> e aponte a câmera.</span></div>
+    <div class="passo"><b>2</b><span>No outro, toque em <b style="all:unset;font-weight:700">Ler o código do outro</b> e aponte a câmera, a uns 20 cm.</span></div>
     <div class="passo"><b>3</b><span>O outro celular mostra o código dele. Aqui, toque em <b style="all:unset;font-weight:700">Ler a resposta</b>. Pronto: os dois ficam iguais.</span></div>
     <button class="btn pri" id="syHost">Começar (mostrar meu código)</button>
-    <button class="btn ghost" id="syCli" style="margin-top:8px">Ler o código do outro</button>`;
+    <button class="btn ghost" id="syCli" style="margin-top:8px">Ler o código do outro</button>
+    <div class="hint" style="margin-top:12px">Muita coisa mudou desde a última vez (ex.: a primeira sincronização)? Use <b>Enviar (Quick Share)</b> e, no outro celular, <b>Juntar arquivo</b>.</div>
+    <button class="btn ghost" id="compArq" style="margin-top:8px">Enviar (Quick Share / WhatsApp)</button>`;
   abrirSheet();
   $('#syHost').onclick = async () => mostrarCodigo(await codificar(montarPacote(null)), 'host');
   $('#syCli').onclick = () => lerCodigo(async P => {
@@ -1554,16 +1626,25 @@ function abrirSync(){
   });
 }
 function mostrarCodigo(partes, papel, r, nomeOutro){
-  pararSync();
-  const host = papel === 'host';
+  pararSync(); manterTelaAcesa();
+  const host = papel === 'host', varias = partes.length > 1;
   $('#sheetIn').innerHTML = `<div class="grab"></div><div class="shead"><h2>${host ? 'Mostre ao outro celular' : 'Recebido de ' + esc(nomeOutro || 'outro celular')}</h2><button class="iconbtn" data-close><svg class="i"><use href="#i-x"/></svg></button></div>
     ${host ? '' : `<p class="sub" style="margin:0">✓ ${resumo(r)}. Agora mostre este código para o outro celular ler.</p>`}
+    ${partes.length > PARTES_GRANDE ? `<div class="aviso-grande">Sincronização grande: <b>${partes.length} partes</b> (normal quando muita coisa mudou). Pelo QR leva alguns minutos; <b>mais rápido: enviar por arquivo</b>. <button class="btn ghost sm" id="compArq" style="margin-top:8px;width:100%">Enviar por Quick Share / WhatsApp</button></div>` : ''}
     <div class="qrbox"><canvas id="qrc"></canvas></div>
-    <div class="qrinfo" id="qri">${partes.length > 1 ? 'Código animado: mantenha na frente da câmera até completar' : ''}</div>
+    <div class="qrinfo" id="qri"></div>
+    ${varias ? '<div class="qrctl"><button id="qAnt" aria-label="Parte anterior">◀</button><button id="qPausa">Pausar</button><button id="qProx" aria-label="Próxima parte">▶</button></div>' : ''}
     ${host ? '<button class="btn pri" id="syLerResp">Ler a resposta do outro celular</button>' : '<button class="btn pri" data-close>Concluir</button>'}`;
-  const cv = $('#qrc'); let i = 0;
-  const passo = () => { desenharQR(cv, partes[i]); if (partes.length > 1) $('#qri').textContent = `Parte ${i + 1} de ${partes.length} · mantenha na frente da câmera`; i = (i + 1) % partes.length; };
-  passo(); if (partes.length > 1) SYNC.timer = setInterval(passo, 700);
+  const cv = $('#qrc'); let i = 0, pausado = false;
+  const mostra = () => { desenharQR(cv, partes[i]); $('#qri').textContent = varias ? `Parte ${i + 1} de ${partes.length}${pausado ? ' · pausado' : ''}` : 'Aponte a câmera do outro celular para este código'; };
+  const avanca = d => { i = (i + d + partes.length) % partes.length; mostra(); };
+  mostra();
+  if (varias) {
+    SYNC.timer = setInterval(() => { if (!pausado) avanca(1); }, 1500);
+    $('#qAnt').onclick = () => { pausado = true; $('#qPausa').textContent = 'Continuar'; avanca(-1); };
+    $('#qProx').onclick = () => { pausado = true; $('#qPausa').textContent = 'Continuar'; avanca(1); };
+    $('#qPausa').onclick = () => { pausado = !pausado; $('#qPausa').textContent = pausado ? 'Continuar' : 'Pausar'; mostra(); };
+  }
   if (host) $('#syLerResp').onclick = () => lerCodigo(P => {
     const r2 = aplicarPacote(P);
     $('#sheetIn').innerHTML = `<div class="grab"></div><div class="ok-grande"><div class="ico">✓</div><h2 style="margin:0 0 4px">Sincronizado com ${esc(P.nome || 'o outro celular')}</h2><p class="sub">${resumo(r2)}</p></div><button class="btn pri" data-close>Concluir</button>`;
@@ -1575,30 +1656,39 @@ async function carregarJsQR(){
   return window.jsQR;
 }
 async function lerCodigo(aoTerminar){
-  pararSync();
+  pararSync(); manterTelaAcesa();
   $('#sheetIn').innerHTML = `<div class="grab"></div><div class="shead"><h2>Aponte para o código</h2><button class="iconbtn" data-close><svg class="i"><use href="#i-x"/></svg></button></div>
     <div class="cam"><video id="vid" playsinline muted></video><div class="mira"></div></div>
-    <div class="qrinfo" id="lst">Abrindo a câmera…</div><div class="progresso"><i id="lpr"></i></div>`;
+    <div class="qrinfo" id="lst">Abrindo a câmera…</div><div class="progresso"><i id="lpr"></i></div><div class="pontos" id="lpt"></div>
+    <div class="hint" style="text-align:center">Segure a uns 20 cm. Se faltar alguma parte, use ◀ ▶ no outro celular para mostrá-la.</div>`;
   abrirSheet();
   const info = t => { const e = $('#lst'); if (e) e.textContent = t; };
-  try { SYNC.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }); }
+  try { SYNC.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false }); }
   catch(e){ info('Não foi possível abrir a câmera. Permita o acesso à câmera para o app e tente de novo.'); return; }
+  // foco contínuo quando o aparelho permite
+  try { const tr = SYNC.stream.getVideoTracks()[0], cap = tr.getCapabilities ? tr.getCapabilities() : {}; if (cap.focusMode && cap.focusMode.includes('continuous')) await tr.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch(e){}
   const vid = $('#vid'); vid.srcObject = SYNC.stream; await vid.play().catch(() => {});
   let detector = null, jsqr = null;
   if ('BarcodeDetector' in window) { try { if ((await BarcodeDetector.getSupportedFormats()).includes('qr_code')) detector = new BarcodeDetector({ formats: ['qr_code'] }); } catch(e){} }
   if (!detector) { try { jsqr = await carregarJsQR(); } catch(e){ info('Leitor de QR indisponível neste aparelho.'); return; } }
   const tela = document.createElement('canvas'), ctx = tela.getContext('2d', { willReadFrequently: true });
-  let sid = null, total = 0; const partes = {};
+  let sid = null, total = 0, versao = 2; const partes = {};
   info('Procurando o código…');
+  const desenharPontos = ultima => { const el = $('#lpt'); if (!el || total < 2) return; el.innerHTML = Array.from({length: total}, (_, k) => `<i class="${partes[k + 1] ? 'ok' : ''}${ultima === k + 1 ? ' at' : ''}"></i>`).join(''); };
   const tratar = async texto => {
-    const m = /^FV1\|(\w+)\|(\d+)\|(\d+)\|([\s\S]*)$/.exec(texto || ''); if (!m) return false;
-    if (sid !== m[1]) { sid = m[1]; total = +m[3]; for (const k in partes) delete partes[k]; }
+    let m = /^FV2:([0-9A-Z]{4}):(\d+):(\d+):([\s\S]*)$/.exec(texto || ''), v = 2;
+    if (!m) { m = /^FV1\|(\w+)\|(\d+)\|(\d+)\|([\s\S]*)$/.exec(texto || ''); v = 1; }
+    if (!m) return false;
+    if (sid !== m[1]) { sid = m[1]; total = +m[3]; versao = v; for (const k in partes) delete partes[k]; }
     partes[+m[2]] = m[4];
-    const n = Object.keys(partes).length; info(total > 1 ? `Lendo… ${n} de ${total} partes` : 'Lido!');
+    const n = Object.keys(partes).length;
+    const faltam = Array.from({length: total}, (_, k) => k + 1).filter(k => !partes[k]);
+    info(total > 1 ? (faltam.length ? `Recebidas ${n} de ${total}${faltam.length <= 6 ? ' · faltam: ' + faltam.join(', ') : ''}` : 'Todas as partes recebidas!') : 'Lido!');
     const pr = $('#lpr'); if (pr) pr.style.width = (n / total * 100) + '%';
+    desenharPontos(+m[2]);
     if (n < total) return false;
     pararSync();
-    try { const P = await decodificar(Array.from({length: total}, (_, i) => partes[i + 1])); await aoTerminar(P); }
+    try { const P = await decodificar(Array.from({length: total}, (_, k) => partes[k + 1]), versao); await aoTerminar(P); }
     catch(e){ info(e.message || 'Código inválido'); toast(e.message || 'Código inválido'); }
     return true;
   };
