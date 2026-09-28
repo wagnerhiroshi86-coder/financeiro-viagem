@@ -359,7 +359,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 <div class="sheet" id="sheet"><div class="in" id="sheetIn"></div></div>
 <div class="toast" id="toast"></div>
 <input type="file" id="cam" accept="image/*" capture="environment" hidden>
-<input type="file" id="imp" accept=".json,.txt,application/json,text/plain" hidden>
+<input type="file" id="imp" accept=".json,.txt,.pdf,application/json,text/plain,application/pdf" hidden>
 
 <svg width="0" height="0" style="position:absolute">
   <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v12h14V9"/><path d="M10 21v-6h4v6"/></symbol>
@@ -396,7 +396,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.13.4';
+const VERSAO_APP = '1.14.0';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -1429,9 +1429,50 @@ function arquivoDeDados(incluirFotos, ext){
   return new File([JSON.stringify(dados)], nome, { type: ext === 'txt' ? 'text/plain' : 'application/json' });
 }
 function baixarArquivo(file){ const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; a.click(); }
-// Quick Share / WhatsApp / Drive: o Android só compartilha alguns tipos a partir da web, por isso .txt
+// Envio entre celulares num PDF: o Quick Share da Samsung trata .txt como mensagem de texto e descarta o conteúdo,
+// e .json não pode ser compartilhado pela web. O PDF abre como uma página explicando o uso; os dados vão
+// comprimidos num bloco FVDATA dentro dele, e o "Juntar arquivo" lê esse bloco.
+async function paraBase64(bytes){ let s = ''; for (let i = 0; i < bytes.length; i += 8192) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192)); return btoa(s); }
+async function pdfDeDados(json, linhas){
+  const comp = new Uint8Array(await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer());
+  const dados = 'FVDATA:' + await paraBase64(comp) + ':FVFIM';
+  // texto da página em WinAnsi: acentos viram escapes octais; o que não existe nessa tabela vira espaço
+  const escPdf = t => t.replace(/[^\x20-\xff]/g, ' ').replace(/[\\()]/g, m => '\\' + m).replace(/[\x80-\xff]/g, c => '\\' + c.charCodeAt(0).toString(8));
+  const texto = linhas.map((l, i) => `BT /F1 ${i ? 12 : 18} Tf 50 ${780 - i * 22} Td (${escPdf(l)}) Tj ET`).join('\n');
+  const objs = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+    `<< /Length ${texto.length} >>\nstream\n${texto}\nendstream`,
+    `<< /Length ${dados.length} >>\nstream\n${dados}\nendstream`
+  ];
+  let pdf = '%PDF-1.4\n'; const pos = [];
+  objs.forEach((o, i) => { pos.push(pdf.length); pdf += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + pos.map(p => String(p).padStart(10, '0') + ' 00000 n \n').join('')
+    + `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return pdf;
+}
+async function lerDadosPdf(texto){
+  const m = /FVDATA:([A-Za-z0-9+/=]+):FVFIM/.exec(texto);
+  if (!m) throw new Error('formato');
+  const bin = atob(m[1]), bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return descomprimir(bytes);
+}
+async function arquivoParaEnviar(){
+  const base = arquivoDeDados(false, 'json'), json = await base.text();
+  const quando = new Date().toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+  const pdf = await pdfDeDados(json, [
+    'Financeiro da Viagem', 'Arquivo de sincronização: ' + S.viagem.nome, 'Enviado por ' + nomeP(S.aparelho) + ' em ' + quando, '',
+    'Para usar: no outro celular, abra o app Financeiro da Viagem,', 'vá em Ajustes, toque em Juntar arquivo e escolha este arquivo.', '',
+    'Os dados da viagem estão guardados dentro deste arquivo.'
+  ]);
+  return new File([pdf], base.name.replace(/\.json$/, '.pdf'), { type: 'application/pdf' });
+}
 async function compartilharArquivo(){
-  const file = arquivoDeDados(false, 'txt');
+  const file = await arquivoParaEnviar();
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     // só o arquivo: com título junto, o Quick Share da Samsung envia o título como texto e descarta o arquivo
     try { await navigator.share({ files: [file] }); toast('No outro celular: Ajustes → Juntar arquivo'); }
@@ -1473,8 +1514,9 @@ function perguntarDono(){
 $('#imp').onchange = e => {
   const f = e.target.files[0]; if (!f) return;
   const rd = new FileReader();
-  rd.onload = () => { try {
-      const d = JSON.parse(rd.result);
+  rd.onload = async () => { try {
+      const txt = String(rd.result);
+      const d = txt.startsWith('%PDF') ? await lerDadosPdf(txt) : JSON.parse(txt);
       if (!d.viagem || !Array.isArray(d.lanc)) throw new Error('formato');
       if (MODO_IMP === 'abrir' || !S) {
         delete d.local; S = normalizar(d); S.aparelho = null; UI.pessoa = 't'; UI.tab = 'painel'; save(); iniciar(); perguntarDono(); return;
