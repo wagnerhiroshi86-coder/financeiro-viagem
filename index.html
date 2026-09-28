@@ -396,7 +396,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.12.0';
+const VERSAO_APP = '1.13.0';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -1534,16 +1534,37 @@ function expandir(o){
   return l;
 }
 function enxugar(l){ const o = {}; for (const [k, v] of Object.entries(l)) { if (k === 'foto' || k === 'loc' || k === 'via') continue; if (v === null || v === '' || v === undefined) continue; o[k] = v; } return o; }
-function hashTxt(t){ let h = 5381; for (let i = 0; i < t.length; i++) h = (h * 33 + t.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
-function montarPacote(peer){
+function hashNum(t){ let h = 5381; for (let i = 0; i < t.length; i++) h = (h * 33 + t.charCodeAt(i)) | 0; return h >>> 0; }
+function hashTxt(t){ return hashNum(t).toString(36); }
+// Conferência: os lançamentos (e exclusões) são divididos em 16 grupos e cada grupo vira um código curto.
+// No fim da sincronização os dois celulares comparam os códigos; grupo diferente = algo não chegou, e só ele é reenviado.
+const N_GRUPOS = 16;
+const grupoDe = id => hashNum(id) % N_GRUPOS;
+function resumoGrupos(){
+  const g = Array.from({length: N_GRUPOS}, () => []);
+  for (const l of S.lanc) g[grupoDe(l.id)].push(l.id + ':' + (l.upd || 0));
+  for (const id of Object.keys(S.excluidos)) g[grupoDe(id)].push(id + ':x');
+  return g.map(a => (hashNum(a.sort().join('|')) % 1679616).toString(36).padStart(4, '0')).join('');
+}
+function gruposDiferentes(outro){
+  if (!outro) return [];
+  const meu = resumoGrupos(), dif = [];
+  for (let i = 0; i < N_GRUPOS; i++) if (meu.slice(i * 4, i * 4 + 4) !== outro.slice(i * 4, i * 4 + 4)) dif.push(i);
+  return dif;
+}
+// ajuste = lista de grupos a reenviar por inteiro (quando a conferência acusou diferença)
+function montarPacote(peer, ajuste){
   const L = S.local, eu = meuDisp();
   // host não sabe quem vai ler: com um único parceiro conhecido (o caso de 2 celulares), usa ele
-  if (!peer && Object.keys(L.recebido).length === 1) peer = Object.keys(L.recebido)[0];
-  const conhecidos = Object.keys(L.enviadoOk);
-  const desde = peer ? (L.enviadoOk[peer] || 0) : (conhecidos.length ? Math.min(...conhecidos.map(k => L.enviadoOk[k])) : 0);
-  const lanc = S.lanc.filter(l => (l.loc || 0) > desde && (!peer || l.via !== peer)).map(compactar);
+  const pares = [...new Set([...Object.keys(L.recebido), ...Object.keys(L.enviadoOk)])];
+  if (!peer && pares.length === 1) peer = pares[0];
+  // com mais de um parceiro, parte do que o menos atualizado confirmou (quem nunca confirmou conta como zero)
+  const desde = peer ? (L.enviadoOk[peer] || 0) : (pares.length ? Math.min(...pares.map(k => L.enviadoOk[k] || 0)) : 0);
+  const noAjuste = id => ajuste.includes(grupoDe(id));
+  const lanc = (ajuste ? S.lanc.filter(l => noAjuste(l.id)) : S.lanc.filter(l => (l.loc || 0) > desde && (!peer || l.via !== peer))).map(compactar);
   const exc = {};
-  for (const [id, x] of Object.entries(L.excLoc)) if (x.loc > desde && (!peer || x.via !== peer)) exc[id] = S.excluidos[id] || x.loc;
+  if (ajuste) { for (const [id, ts] of Object.entries(S.excluidos)) if (noAjuste(id)) exc[id] = ts; }
+  else for (const [id, x] of Object.entries(L.excLoc)) if (x.loc > desde && (!peer || x.via !== peer)) exc[id] = S.excluidos[id] || x.loc;
   // viajantes/carteiras e categorias só vão se mudaram desde a última vez que o outro CONFIRMOU ter recebido
   const vh = hashTxt(JSON.stringify([S.viagem.viajantes, S.categorias])), ts = Date.now();
   L.estrEnviada ||= {};
@@ -1551,7 +1572,7 @@ function montarPacote(peer){
   const mandarEstrutura = !(e && e.hash === vh && (L.enviadoOk[peer] || 0) >= e.ts);
   if (mandarEstrutura && peer) L.estrEnviada[peer] = { hash: vh, ts };
   return { t:'fvs', v:2, viagem:S.viagem.id, de:eu, nome:nomeP(S.aparelho), ts, acks:{...L.recebido}, vh,
-    lanc, exc, ...(mandarEstrutura ? { via:S.viagem.viajantes, cats:S.categorias } : {}) };
+    lanc, exc, ...(ajuste ? { aj: ajuste } : {}), ...(mandarEstrutura ? { via:S.viagem.viajantes, cats:S.categorias } : {}), rg: resumoGrupos() };
 }
 function aplicarPacote(P){
   if (!P || P.t !== 'fvs') throw new Error('Código não reconhecido');
@@ -1622,10 +1643,26 @@ function abrirSync(){
   $('#syHost').onclick = async () => mostrarCodigo(await codificar(montarPacote(null)), 'host');
   $('#syCli').onclick = () => lerCodigo(async P => {
     const r = aplicarPacote(P);
-    mostrarCodigo(await codificar(montarPacote(P.de)), 'client', r, P.nome);
+    // código de ajuste: responde com os mesmos grupos por inteiro (o que só este celular tiver também volta)
+    mostrarCodigo(await codificar(montarPacote(P.de, P.aj)), 'client', r, P.nome);
   });
 }
-function mostrarCodigo(partes, papel, r, nomeOutro){
+// host leu a resposta: confere se os dois ficaram iguais; se não, oferece o código de ajuste (só os grupos diferentes)
+async function concluirSync(P, tentativa){
+  const r2 = aplicarPacote(P);
+  const dif = gruposDiferentes(P.rg), nome = esc(P.nome || 'o outro celular');
+  if (!dif.length) {
+    $('#sheetIn').innerHTML = `<div class="grab"></div><div class="ok-grande"><div class="ico">✓</div><h2 style="margin:0 0 4px">Sincronizado com ${nome}</h2><p class="sub">${resumo(r2)}${P.rg ? '<br>Conferido: os dois celulares estão iguais.' : ''}</p></div><button class="btn pri" data-close>Concluir</button>`;
+    return;
+  }
+  const partes = await codificar(montarPacote(P.de, dif));
+  $('#sheetIn').innerHTML = `<div class="grab"></div><div class="shead"><h2>Falta um ajuste</h2><button class="iconbtn" data-close><svg class="i"><use href="#i-x"/></svg></button></div>
+    <p class="sub" style="margin:0 0 10px">Recebido: ${resumo(r2)}. Na conferência final, alguns lançamentos ainda estão diferentes entre os dois celulares.
+    ${tentativa > 1 ? 'O ajuste pelo QR não resolveu; envie o arquivo completo (Quick Share ou WhatsApp) e, no outro celular, use <b>Juntar arquivo</b>.' : `Mostre o código de ajuste para ${nome} ler (${partes.length} parte${partes.length > 1 ? 's' : ''}); depois leia a resposta dele aqui.`}</p>
+    ${tentativa > 1 ? '<button class="btn pri" id="compArq">Enviar arquivo completo</button>' : '<button class="btn pri" id="syAjuste">Mostrar código de ajuste</button>'}`;
+  if ($('#syAjuste')) $('#syAjuste').onclick = () => mostrarCodigo(partes, 'host', null, null, tentativa + 1);
+}
+function mostrarCodigo(partes, papel, r, nomeOutro, tentativa = 1){
   pararSync(); manterTelaAcesa();
   const host = papel === 'host', varias = partes.length > 1;
   $('#sheetIn').innerHTML = `<div class="grab"></div><div class="shead"><h2>${host ? 'Mostre ao outro celular' : 'Recebido de ' + esc(nomeOutro || 'outro celular')}</h2><button class="iconbtn" data-close><svg class="i"><use href="#i-x"/></svg></button></div>
@@ -1645,10 +1682,7 @@ function mostrarCodigo(partes, papel, r, nomeOutro){
     $('#qProx').onclick = () => { pausado = true; $('#qPausa').textContent = 'Continuar'; avanca(1); };
     $('#qPausa').onclick = () => { pausado = !pausado; $('#qPausa').textContent = pausado ? 'Continuar' : 'Pausar'; mostra(); };
   }
-  if (host) $('#syLerResp').onclick = () => lerCodigo(P => {
-    const r2 = aplicarPacote(P);
-    $('#sheetIn').innerHTML = `<div class="grab"></div><div class="ok-grande"><div class="ico">✓</div><h2 style="margin:0 0 4px">Sincronizado com ${esc(P.nome || 'o outro celular')}</h2><p class="sub">${resumo(r2)}</p></div><button class="btn pri" data-close>Concluir</button>`;
-  });
+  if (host) $('#syLerResp').onclick = () => lerCodigo(P => concluirSync(P, tentativa));
 }
 async function carregarJsQR(){
   if (window.jsQR) return window.jsQR;
