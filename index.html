@@ -372,7 +372,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.8.1';
+const VERSAO_APP = '1.9.0';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -501,11 +501,29 @@ function emNativa(l){
   return pagtos(l).reduce((a, pg) => a + (+pg.valor || 0) * fatorNativa(fonteObj(pg)), 0);
 }
 function emLocal(l){ return l.moeda === S.viagem.local.cod ? l.valor : l.valor / S.viagem.cotacao; }
+// Parte de cada responsável em CENTAVOS EXATOS (a soma é sempre o total da conta):
+// 1) se cada responsável pagou a própria parte, a parte dele é o que ele pagou;
+// 2) senão, cada parte é arredondada ao centavo e o centavo que sobra fica com o primeiro responsável
+//    (mesma regra que o formulário usa para sugerir os valores de pagamento).
+function partesCent(l){
+  const c = x => Math.round(x * 100);
+  const total = c(l.valor), ids = l.resp;
+  const exata = id => l.partes ? (+l.partes[id] || 0) : l.valor / ids.length;
+  const pgs = pagtos(l);
+  if (pgs.length > 1) {
+    const pago = {}; for (const pg of pgs) pago[pg.por] = (pago[pg.por] || 0) + c(+pg.valor || 0);
+    const mesmos = Object.keys(pago).length === ids.length && ids.every(id => pago[id] !== undefined);
+    if (mesmos && ids.every(id => Math.abs(pago[id] - exata(id) * 100) <= 1.01) && ids.reduce((a, id) => a + pago[id], 0) === total) return pago;
+  }
+  const r = {}; ids.forEach(id => r[id] = c(exata(id)));
+  const dif = total - ids.reduce((a, id) => a + r[id], 0);
+  if (ids.length) r[ids[0]] += dif;
+  return r;
+}
 function parte(l, p){
   if (p === 't') return 1;
-  if (!l.resp.includes(p)) return 0;
-  if (l.partes && l.valor > 0) return (l.partes[p] || 0) / l.valor;
-  return 1 / l.resp.length;
+  if (!l.resp.includes(p) || !(l.valor > 0)) return 0;
+  return (partesCent(l)[p] || 0) / Math.round(l.valor * 100);
 }
 const trav = id => S.viagem.viajantes.find(v => v.id === id);
 const inicial = n => (n||'?').trim().charAt(0).toUpperCase() || '?';
