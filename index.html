@@ -396,7 +396,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.13.0';
+const VERSAO_APP = '1.13.1';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -1320,7 +1320,7 @@ document.addEventListener('click', e => {
     return toast(fo ? `${nomeP(por)} · ${fo.nome}` : 'Meio de pagamento'); }
   if (q('[data-nopay]')) return toast('Meio de pagamento não definido. Abra o lançamento e escolha em "Vai pagar com".');
   if (q('.item')) return abrirForm(q('.item').dataset.id);
-  if (q('[data-close]') || t.id==='scrim') return fecharSheet();
+  if (q('[data-close]') || t.id==='scrim') return fecharComAviso();
   // formulário
   if (q('#fMoeda button')) { lerCamposForm(); F.moeda = q('#fMoeda button').dataset.m; return renderForm(); }
   if (q('[data-fcat]')) { lerCamposForm(); const c = q('[data-fcat]').dataset.fcat; if (F.cat!==c){ F.cat=c; F.sub=null; if(!F.id) F.resp=respPadrao(c);} return renderForm(); }
@@ -1491,7 +1491,7 @@ $('#imp').onchange = e => {
     } catch(err){ toast('Arquivo inválido'); } };
   rd.readAsText(f); e.target.value='';
 };
-$('#scrim').onclick = fecharSheet;
+$('#scrim').onclick = fecharComAviso;
 
 /* ============ Sincronização por QR Code ============
    Protocolo (dois celulares, sem rede):
@@ -1500,7 +1500,17 @@ $('#scrim').onclick = fecharSheet;
    3) HOST lê P2 e junta. Cada pacote leva "ack": até que hora (do relógio do outro) já foi recebido,
       assim cada lado sabe o que o outro já tem e envia só o que falta.
    ================================================== */
-const SYNC = { timer:null, stream:null, loop:null, lock:null };
+const SYNC = { timer:null, stream:null, loop:null, lock:null, meio:null };
+// fechar no meio da sincronização: avisa o que fica faltando (meio = 'host' | 'client' | 'ajuste')
+const AVISO_MEIO = {
+  host: 'A sincronização ficou pela metade: falta ler a resposta do outro celular, e as mudanças dele não chegam aqui. Sair mesmo assim?',
+  client: 'O outro celular ainda precisa ler este código; sem isso, as mudanças deste celular não chegam lá. Sair mesmo assim?',
+  ajuste: 'Os dois celulares ainda estão diferentes. Sair sem fazer o ajuste?'
+};
+function fecharComAviso(){
+  if (SYNC.meio && $('#sheet').classList.contains('on') && !confirm(AVISO_MEIO[SYNC.meio])) return;
+  SYNC.meio = null; fecharSheet();
+}
 function meuDisp(){
   try { let d = localStorage.getItem('finviagem-disp'); if (!d) { d = 'd' + Math.random().toString(36).slice(2, 10); localStorage.setItem('finviagem-disp', d); } return d; }
   catch(e){ S.local.disp ||= 'd' + Math.random().toString(36).slice(2, 10); return S.local.disp; }
@@ -1629,12 +1639,12 @@ function resumo(r){ return r.novos + r.atualizados + r.removidos ? `${r.novos} n
 const PARTES_GRANDE = 8; // acima disso, sugere enviar por arquivo
 
 function abrirSync(){
-  pararSync();
+  pararSync(); SYNC.meio = null;
   $('#sheetIn').innerHTML = `<div class="grab"></div><div class="shead"><h2>Sincronizar celulares</h2><button class="iconbtn" data-close><svg class="i"><use href="#i-x"/></svg></button></div>
     <p class="sub" style="margin:0 0 6px">Os dois celulares lado a lado, com o app aberto. Não precisa de internet.</p>
     <div class="passo"><b>1</b><span>Neste celular, toque em <b style="all:unset;font-weight:700">Começar</b>. Ele mostra um QR Code.</span></div>
     <div class="passo"><b>2</b><span>No outro, toque em <b style="all:unset;font-weight:700">Ler o código do outro</b> e aponte a câmera, a uns 20 cm.</span></div>
-    <div class="passo"><b>3</b><span>O outro celular mostra o código dele. Aqui, toque em <b style="all:unset;font-weight:700">Ler a resposta</b>. Pronto: os dois ficam iguais.</span></div>
+    <div class="passo"><b>3</b><span>O outro celular mostra o código dele. Aqui, toque em <b style="all:unset;font-weight:700">Ler a resposta</b>. Quem começa também termina; não precisa inverter.</span></div>
     <button class="btn pri" id="syHost">Começar (mostrar meu código)</button>
     <button class="btn ghost" id="syCli" style="margin-top:8px">Ler o código do outro</button>
     <div class="hint" style="margin-top:12px">Muita coisa mudou desde a última vez (ex.: a primeira sincronização)? Use <b>Enviar (Quick Share)</b> e, no outro celular, <b>Juntar arquivo</b>.</div>
@@ -1651,6 +1661,7 @@ function abrirSync(){
 async function concluirSync(P, tentativa){
   const r2 = aplicarPacote(P);
   const dif = gruposDiferentes(P.rg), nome = esc(P.nome || 'o outro celular');
+  SYNC.meio = dif.length ? 'ajuste' : null;
   if (!dif.length) {
     $('#sheetIn').innerHTML = `<div class="grab"></div><div class="ok-grande"><div class="ico">✓</div><h2 style="margin:0 0 4px">Sincronizado com ${nome}</h2><p class="sub">${resumo(r2)}${P.rg ? '<br>Conferido: os dois celulares estão iguais.' : ''}</p></div><button class="btn pri" data-close>Concluir</button>`;
     return;
@@ -1665,13 +1676,14 @@ async function concluirSync(P, tentativa){
 function mostrarCodigo(partes, papel, r, nomeOutro, tentativa = 1){
   pararSync(); manterTelaAcesa();
   const host = papel === 'host', varias = partes.length > 1;
+  SYNC.meio = papel;
   $('#sheetIn').innerHTML = `<div class="grab"></div><div class="shead"><h2>${host ? 'Mostre ao outro celular' : 'Recebido de ' + esc(nomeOutro || 'outro celular')}</h2><button class="iconbtn" data-close><svg class="i"><use href="#i-x"/></svg></button></div>
-    ${host ? '' : `<p class="sub" style="margin:0">✓ ${resumo(r)}. Agora mostre este código para o outro celular ler.</p>`}
+    ${host ? '' : `<p class="sub" style="margin:0">✓ ${resumo(r)}.</p><div class="aviso-grande"><b>Falta 1 passo:</b> no outro celular, toque em <b>Ler a resposta do outro celular</b> e aponte para este código. Só assim as mudanças deste celular chegam lá.</div>`}
     ${partes.length > PARTES_GRANDE ? `<div class="aviso-grande">Sincronização grande: <b>${partes.length} partes</b> (normal quando muita coisa mudou). Pelo QR leva alguns minutos; <b>mais rápido: enviar por arquivo</b>. <button class="btn ghost sm" id="compArq" style="margin-top:8px;width:100%">Enviar por Quick Share / WhatsApp</button></div>` : ''}
     <div class="qrbox"><canvas id="qrc"></canvas></div>
     <div class="qrinfo" id="qri"></div>
     ${varias ? '<div class="qrctl"><button id="qAnt" aria-label="Parte anterior">◀</button><button id="qPausa">Pausar</button><button id="qProx" aria-label="Próxima parte">▶</button></div>' : ''}
-    ${host ? '<button class="btn pri" id="syLerResp">Ler a resposta do outro celular</button>' : '<button class="btn pri" data-close>Concluir</button>'}`;
+    ${host ? '<button class="btn pri" id="syLerResp">Ler a resposta do outro celular</button>' : '<button class="btn pri" id="syCliOk">Pronto, o outro já leu</button>'}`;
   const cv = $('#qrc'); let i = 0, pausado = false;
   const mostra = () => { desenharQR(cv, partes[i]); $('#qri').textContent = varias ? `Parte ${i + 1} de ${partes.length}${pausado ? ' · pausado' : ''}` : 'Aponte a câmera do outro celular para este código'; };
   const avanca = d => { i = (i + d + partes.length) % partes.length; mostra(); };
@@ -1683,6 +1695,7 @@ function mostrarCodigo(partes, papel, r, nomeOutro, tentativa = 1){
     $('#qPausa').onclick = () => { pausado = !pausado; $('#qPausa').textContent = pausado ? 'Continuar' : 'Pausar'; mostra(); };
   }
   if (host) $('#syLerResp').onclick = () => lerCodigo(P => concluirSync(P, tentativa));
+  else $('#syCliOk').onclick = () => { SYNC.meio = null; fecharSheet(); };
 }
 async function carregarJsQR(){
   if (window.jsQR) return window.jsQR;
