@@ -316,6 +316,17 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .acerto[data-dev] .t::after{content:"›";color:var(--ink-3);margin-left:4px}
 .acerto-net{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--brand-soft);font-size:13.5px}
 .acerto-net b{font-size:15px}
+/* selo do meio de pagamento: cor da instituição + sigla + tipo (Cred/Débt/Esp) */
+.selo{display:inline-flex;align-items:center;gap:3px;height:19px;padding:0 5px;border-radius:5px;background:var(--c);color:var(--t);font-size:10.5px;font-weight:800;letter-spacing:.2px;line-height:1;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(0,0,0,.14);white-space:nowrap}
+.selo em{font-style:normal;font-weight:600;font-size:9.5px;opacity:.85}
+.selo .quem{min-width:15px;height:15px;padding:0 3px;border-radius:8px;display:inline-grid;place-items:center;font-size:8.5px;font-weight:800;color:#fff;margin-left:-3px;box-shadow:0 0 0 1.5px rgba(255,255,255,.85)}
+.selo-g{width:36px;height:36px;border-radius:10px;background:var(--c);color:var(--t);display:grid;place-items:center;align-content:center;font-weight:800;font-size:11px;line-height:1.05;text-align:center;box-shadow:inset 0 0 0 1px rgba(0,0,0,.14);flex:none}
+.selo-g em{font-style:normal;font-weight:600;font-size:8.5px;opacity:.85}
+.cores-selo{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+.cores-selo button{width:28px;height:28px;border-radius:8px;border:2px solid transparent;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
+.cores-selo button.on{border-color:var(--ink)}
+.selo-edit{display:flex;align-items:center;gap:10px}
+.selo-edit .field{width:110px;text-transform:uppercase}
 .toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:13.5px;opacity:0;transition:.2s;z-index:60;pointer-events:none}
 .toast.on{opacity:1;transform:translateX(-50%)}
 </style>
@@ -372,7 +383,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.9.1';
+const VERSAO_APP = '1.10.0';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -527,7 +538,41 @@ function parte(l, p){
 }
 const trav = id => S.viagem.viajantes.find(v => v.id === id);
 const inicial = n => (n||'?').trim().charAt(0).toUpperCase() || '?';
-function av(id){ const v = trav(id) || {nome:'?',cor:'#888'}; return `<span class="av" style="background:${v.cor}" title="${esc(v.nome)}">${esc(inicial(v.nome))}</span>`; }
+// iniciais que diferenciam as pessoas: inicial do nome; se repetir, nome + sobrenome (MA/MS);
+// sem sobrenome, duas primeiras letras do nome (Ma/Mr); em último caso, numera.
+function iniciaisPessoas(){
+  const vs = S.viagem.viajantes, out = {};
+  const palavras = v => (v.nome || '?').trim().split(/\s+/).filter(Boolean);
+  const nivel1 = v => (palavras(v)[0] || '?').charAt(0).toUpperCase();
+  const nivel2 = v => { const w = palavras(v); return w.length > 1 ? (w[0].charAt(0) + w[w.length - 1].charAt(0)).toUpperCase() : (w[0] || '?').charAt(0).toUpperCase() + (w[0] || '?').charAt(1).toLowerCase(); };
+  const conta = (f, v) => vs.filter(x => f(x) === f(v)).length;
+  for (const v of vs) out[v.id] = conta(nivel1, v) === 1 ? nivel1(v) : conta(nivel2, v) === 1 ? nivel2(v) : nivel2(v) + (vs.filter(x => nivel2(x) === nivel2(v)).indexOf(v) + 1);
+  return out;
+}
+function iniciais(id){ return iniciaisPessoas()[id] || '?'; }
+function av(id){ const v = trav(id) || {nome:'?',cor:'#888'}; return `<span class="av" style="background:${v.cor}" title="${esc(v.nome)}">${esc(iniciais(id))}</span>`; }
+
+/* ---------- selo do meio de pagamento ---------- */
+const TIPO_SELO = { credito:'Cred', debito:'Débt', especie:'Esp' };
+const CORES_SELO = ['#1A1A1A','#F5C518','#820AD1','#FF7A00','#EC0000','#0B4AA2','#00A650','#9FE870','#00B2E3','#8A6A3D','#6B7280','#2E7D4F'];
+// sugestão de sigla e cor pelo nome (o usuário pode trocar ao editar a fonte)
+function padraoSelo(fo){
+  const n = (fo.nome || '').toLowerCase();
+  if (fo.tipo === 'especie') return { sigla:'$', cor:'#2E7D4F' };
+  const regras = [[/nomad/,'NMD','#F5C518'],[/\bc6\b/,'C6','#1A1A1A'],[/wise/,'WISE','#9FE870'],[/nubank|\bnu\b/,'NU','#820AD1'],[/inter\b/,'INTER','#FF7A00'],
+    [/ita[uú]/,'ITAÚ','#FF7A00'],[/bradesco/,'BRAD','#EC0000'],[/santander/,'SAN','#EC0000'],[/banco do brasil|\bbb\b/,'BB','#F5C518'],[/caixa/,'CAIXA','#0B4AA2'],
+    [/revolut/,'REV','#0B4AA2'],[/\bxp\b/,'XP','#1A1A1A'],[/avenue/,'AVE','#0B4AA2'],[/btg/,'BTG','#0B4AA2']];
+  for (const [re, sg, cor] of regras) if (re.test(n)) return { sigla:sg, cor };
+  const w = (fo.nome || '?').trim().split(/\s+/);
+  return { sigla: (w[0] || '?').slice(0, 4).toUpperCase(), cor:'#6B7280' };
+}
+function seloDe(fo){ const d = padraoSelo(fo); return { sigla: fo.sigla || d.sigla, cor: fo.cor || d.cor }; }
+function corTexto(hex){ const h = hex.replace('#',''); const [r,g,b] = [0,2,4].map(i => parseInt(h.substr(i,2),16)/255); return (0.299*r + 0.587*g + 0.114*b) > 0.62 ? '#1B2424' : '#FFFFFF'; }
+function seloHTML(fo, quem, attrs = ''){
+  const sl = seloDe(fo), pessoa = quem ? trav(quem) : null;
+  return `<span class="selo" style="--c:${sl.cor};--t:${corTexto(sl.cor)}" ${attrs}>${pessoa ? `<i class="quem" style="background:${pessoa.cor}">${esc(iniciais(quem))}</i>` : ''}${esc(sl.sigla)}<em>${TIPO_SELO[fo.tipo] || ''}</em></span>`;
+}
+function seloGrande(fo){ const sl = seloDe(fo); return `<span class="selo-g" style="--c:${sl.cor};--t:${corTexto(sl.cor)}">${esc(sl.sigla)}<em>${TIPO_SELO[fo.tipo] || ''}</em></span>`; }
 function whoBadge(l){
   const n = S.viagem.viajantes.length;
   if (l.resp.length === 1) { const v = trav(l.resp[0]) || {nome:'?',cor:'#888'}; return `<span class="who" style="background:${v.cor}">${esc(v.nome)}</span>`; }
@@ -715,7 +760,7 @@ function cardCarteira(p){
     ${c.fontes.map(x => { const ti = TIPO_F[x.fo.tipo] || TIPO_F.debito; const fs = x.fo.moeda === S.viagem.nativa.cod ? S.viagem.nativa.simb : S.viagem.local.simb;
       const usado = x.fo.valor ? Math.min(100, Math.max(0, x.gasto / x.fo.valor * 100)) : 0;
       const pc = n => x.fo.valor ? Math.min(100, Math.max(0, n / x.fo.valor * 100)) : 0;
-      return `<div class="fonte ${x.fo.tipo==='credito'?'cred':''}" data-verf="${p}|${x.fo.id}">${ic(ti.ic, x.fo.tipo==='especie'?'#2E7D4F':'#1D5C5D')}
+      return `<div class="fonte ${x.fo.tipo==='credito'?'cred':''}" data-verf="${p}|${x.fo.id}">${seloGrande(x.fo)}
         <div><div class="n">${esc(x.fo.nome)} <span class="muted">›</span></div><div class="minibar seg">${barraFonte(x)}</div>
         ${x.apagar > 0.005 ? `<div class="prev num">a pagar ${fmt(x.apagar, fs)}</div>` : ''}${x.estimado > 0.005 ? `<div class="prev num"><span class="e">estimado ${fmt(x.estimado, fs)}</span></div>` : ''}</div>
         <div class="vals num"><b>${fmt(x.resta, fs)}</b>${x.fo.tipo==='credito'?'livre agora':'de '+fmt0(x.fo.valor, fs)}${x.previsto > 0.005 ? (() => { const pj = x.fo.valor - x.gasto - x.previsto; return `<div class="proj ${classeProj(x, pj)}"><small>projetado</small>${fmt(pj, fs)}</div>`; })() : ''}</div></div>`; }).join('')}
@@ -772,7 +817,7 @@ function abrirCarteira(p){
   $('#sheetIn').innerHTML = `<div class="grab"></div><div class="shead"><h2>Carteira de ${esc(v.nome)}</h2><button class="iconbtn" data-close><svg class="i"><use href="#i-x"/></svg></button></div>
     <p class="sub" style="margin:0 0 6px">Quanto ${esc(v.nome)} está levando, por fonte. Toque numa fonte para editar.</p>
     ${c.fontes.map(x => { const ti = TIPO_F[x.fo.tipo] || TIPO_F.debito; const fs = x.fo.moeda === S.viagem.nativa.cod ? S.viagem.nativa.simb : S.viagem.local.simb;
-      return `<div class="fonte ${x.fo.tipo==='credito'?'cred':''}" data-edf="${x.fo.id}" style="cursor:pointer">${ic(ti.ic, x.fo.tipo==='especie'?'#2E7D4F':'#1D5C5D')}
+      return `<div class="fonte ${x.fo.tipo==='credito'?'cred':''}" data-edf="${x.fo.id}" style="cursor:pointer">${seloGrande(x.fo)}
         <div><div class="n">${esc(x.fo.nome)}</div><div class="sub">${x.fo.tipo==='credito' && x.fo.noOrcamento ? 'Crédito (no orçamento da viagem)' : ti.nome}</div></div><div class="vals num"><b>${fmt(x.fo.valor, fs)}</b>${x.fo.tipo==='credito'?'limite':'levando'}</div></div>`; }).join('') || '<div class="empty" style="padding:20px">Nenhuma fonte cadastrada.</div>'}
     <button class="btn ghost" id="addFonte" style="margin-top:10px">+ Adicionar fonte</button>`;
   abrirSheet();
@@ -783,10 +828,16 @@ function editarFonte(p, id){
   const v = trav(p), sv = S.viagem; v.fontes ||= [];
   const orig = id ? v.fontes.find(x => x.id === id) : null;
   const E = orig ? {...orig} : {id:null, nome:'', tipo:'debito', moeda:sv.local.cod, valor:null, cambio:null, iof:sv.iofPadrao};
+  { const sl = seloDe(E); E._sigla = orig && orig.sigla ? orig.sigla : sl.sigla; E._cor = orig && orig.cor ? orig.cor : sl.cor; E._siglaManual = !!(orig && orig.sigla); }
   const desenhar = () => {
     const cred = E.tipo === 'credito', loc = E.moeda === sv.local.cod;
+    if (!E._siglaManual) { const sl = padraoSelo(E); E._sigla = sl.sigla; if (!E._corManual) E._cor = sl.cor; }
     $('#sheetIn').innerHTML = `<div class="grab"></div><div class="shead"><h2>${orig?'Editar fonte':'Nova fonte'}</h2><button class="iconbtn" id="voltaCart"><svg class="i"><use href="#i-x"/></svg></button></div>
       <div class="flabel">Nome</div><input class="field" id="eNome" placeholder="Ex.: Nomad débito internacional" value="${esc(E.nome)}">
+      <div class="flabel">Selo <span class="muted" style="font-weight:400">· aparece nos lançamentos pagos com esta fonte</span></div>
+      <div class="selo-edit"><span id="eSeloPrev">${seloGrande({...E, sigla: E._sigla, cor: E._cor})}</span>
+        <input class="field" id="eSigla" maxlength="5" placeholder="Sigla" value="${esc(E._sigla || '')}"></div>
+      <div class="cores-selo" id="eCores">${CORES_SELO.map(c => `<button data-cor="${c}" style="background:${c}" class="${(E._cor||'').toUpperCase()===c.toUpperCase()?'on':''}" aria-label="cor ${c}"></button>`).join('')}</div>
       <div class="flabel">Tipo</div><div class="segl" id="eTipo">${Object.entries(TIPO_F).map(([k,t])=>`<button data-t="${k}" class="${E.tipo===k?'on':''}">${k==='debito'?'Débito / conta':k==='credito'?'Crédito':'Espécie'}</button>`).join('')}</div>
       ${cred?`<div class="toggle"><div>Usar no orçamento da viagem<div class="hint" style="margin:0">Ligado: o limite conta como dinheiro da viagem (ex.: cartão para pagar hotéis). Desligado: fica como reserva de emergência.</div></div><button class="sw ${E.noOrcamento?'on':''}" id="eOrc"></button></div>`:''}
       <div class="flabel">Moeda</div><div class="cur" id="eMoeda" style="display:inline-flex"><button data-m="${sv.local.cod}" class="${loc?'on':''}">${sv.local.simb}</button><button data-m="${sv.nativa.cod}" class="${!loc?'on':''}">${sv.nativa.simb}</button></div>
@@ -798,15 +849,18 @@ function editarFonte(p, id){
       : `<div class="flabel">IOF (%)</div><input class="field num" id="eIof" inputmode="decimal" value="${String(E.iof ?? sv.iofPadrao).replace('.',',')}">
         <div class="hint">Gastos em ${sv.local.simb} com esta fonte são convertidos pela cotação + este IOF.</div>`}
       <button class="btn pri" id="eOk">Salvar</button>${orig?'<button class="btn danger" id="eDel">Excluir fonte</button>':''}`;
-    const ler = () => { E.nome = $('#eNome').value; E.valor = $('#eValor').value; if ($('#eCambio')) E.cambio = $('#eCambio').value; if ($('#eIof')) E.iof = $('#eIof').value; };
+    const ler = () => { E.nome = $('#eNome').value; E.valor = $('#eValor').value; const sg = $('#eSigla').value.trim().toUpperCase(); if (sg !== E._sigla) { E._sigla = sg; E._siglaManual = true; } if ($('#eCambio')) E.cambio = $('#eCambio').value; if ($('#eIof')) E.iof = $('#eIof').value; };
     if ($('#eOrc')) $('#eOrc').onclick = () => { ler(); E.noOrcamento = !E.noOrcamento; desenhar(); };
+    $('#eCores').onclick = e => { const b = e.target.closest('[data-cor]'); if (!b) return; ler(); E._cor = b.dataset.cor; E._corManual = true; desenhar(); };
+    $('#eSigla').oninput = () => { E._sigla = $('#eSigla').value.trim().toUpperCase(); E._siglaManual = true; const f = {...E, sigla: E._sigla, cor: E._cor}; $('#eSeloPrev').innerHTML = seloGrande(f); };
+    $('#eNome').onchange = () => { ler(); if (!E._siglaManual) desenhar(); };
     $('#eTipo').onclick = e => { const b = e.target.closest('[data-t]'); if (!b) return; ler(); E.tipo = b.dataset.t; desenhar(); };
     $('#eMoeda').onclick = e => { const b = e.target.closest('[data-m]'); if (!b) return; ler(); E.moeda = b.dataset.m; desenhar(); };
     $('#voltaCart').onclick = () => abrirCarteira(p);
     $('#eOk').onclick = () => {
       ler(); const num = x => parseFloat(String(x ?? '').replace(',','.'));
       const valor = num(E.valor); if (!(valor >= 0) || E.valor === '' || E.valor == null) return toast('Digite o valor');
-      const reg = {id: E.id || p + '-f' + Date.now().toString(36), nome: E.nome.trim() || TIPO_F[E.tipo].nome, tipo: E.tipo, moeda: E.moeda, valor, noOrcamento: E.tipo === 'credito' ? !!E.noOrcamento : undefined,
+      const reg = {id: E.id || p + '-f' + Date.now().toString(36), nome: E.nome.trim() || TIPO_F[E.tipo].nome, tipo: E.tipo, moeda: E.moeda, valor, noOrcamento: E.tipo === 'credito' ? !!E.noOrcamento : undefined, sigla: (E._sigla || '').slice(0, 5) || undefined, cor: E._cor || undefined,
         cambio: E.moeda === sv.local.cod && num(E.cambio) > 0 ? num(E.cambio) : null, iof: E.moeda === sv.nativa.cod ? (num(E.iof) >= 0 ? num(E.iof) : sv.iofPadrao) : undefined};
       reg.upd = Date.now();
       if (orig) Object.assign(orig, reg); else v.fontes.push(reg);
@@ -924,7 +978,7 @@ function telaLista(){
       return `<div class="group"><div class="ghead"><span>${nomeDia(d)}</span><span class="num">${fmt(tot,sb)}</span></div>
       ${grupos[d].map(l=>{ const c=cat(l.cat); const v=val(l,p,UI.moedaVer); const vn = UI.moedaVer==='nativa'?emLocal(l)*parte(l,p):emNativa(l)*parte(l,p);
         return `<div class="item ${l.incluir?'':'off'}" data-id="${l.id}">${ic(c.icone,c.cor)}
-          <div><div class="t">${esc(l.desc)}</div>${l.obs && UI.busca ? `<div class="obs">${esc(l.obs)}</div>` : ''}<div class="m"><span class="st ${l.status}">${STN[l.status]}</span>${whoBadge(l)}<span>${esc(l.sub)}</span>${semFormaPgto(l, p) ? `<span class="nopay" data-nopay title="Meio de pagamento não definido" aria-label="Meio de pagamento não definido">${ICONE_SEM_PGTO}</span>` : ''}${dividasVisiveis(l, p).length ? `<span class="divida" data-divida="${l.id}" title="Conta dividida com acerto pendente" aria-label="Conta dividida com acerto pendente">${ICONE_DIVIDA}</span>` : ''}${(!isReal(l) || (pagtos(l).length===1 && l.resp.length===1 && l.resp[0]===l.por)) ? '' : `<span class="pagopor">· ${pagtos(l).length > 1 ? 'pago por ' + pagtos(l).map(pg => esc(nomeP(pg.por))).join(' e ') : 'pago por ' + esc(nomeP(l.por))}</span>`}</div></div>
+          <div><div class="t">${esc(l.desc)}</div>${l.obs && UI.busca ? `<div class="obs">${esc(l.obs)}</div>` : ''}<div class="m"><span class="st ${l.status}">${STN[l.status]}</span>${whoBadge(l)}<span>${esc(l.sub)}</span>${pagtos(l).filter(pg => (p === 't' || pg.por === p) && fonteObj(pg)).map(pg => seloHTML(fonteObj(pg), p === 't' ? pg.por : null, `data-selo="${l.id}|${pg.por}" title="${esc(nomeP(pg.por) + ' · ' + fonteObj(pg).nome)}"`)).join('')}${semFormaPgto(l, p) ? `<span class="nopay" data-nopay title="Meio de pagamento não definido" aria-label="Meio de pagamento não definido">${ICONE_SEM_PGTO}</span>` : ''}${dividasVisiveis(l, p).length ? `<span class="divida" data-divida="${l.id}" title="Conta dividida com acerto pendente" aria-label="Conta dividida com acerto pendente">${ICONE_DIVIDA}</span>` : ''}${(!isReal(l) || (pagtos(l).length===1 && l.resp.length===1 && l.resp[0]===l.por)) ? '' : `<span class="pagopor">· ${pagtos(l).length > 1 ? 'pago por ' + pagtos(l).map(pg => esc(nomeP(pg.por))).join(' e ') : 'pago por ' + esc(nomeP(l.por))}</span>`}</div></div>
           <div class="v num">${fmt(v,sb)}<small>${fmt0(vn, UI.moedaVer==='nativa'?S.viagem.local.simb:S.viagem.nativa.simb)}</small></div></div>`;}).join('')}</div>`; }).join('')
       : `<div class="empty">Nenhum lançamento com esses filtros.</div>`}`;
 }
@@ -1023,13 +1077,13 @@ function textoRestoPg(){
 }
 function blocoPagamentos(){
   const pago = F.status === 'realizado' || F.status === 'pago';
-  if (!F.pagamentos) return `<div><div class="flabel">${pago ? 'Pago com' : 'Vai pagar com'}</div><select class="field" id="fFonte">${((trav(F.por)||{}).fontes||[]).map(fo=>`<option value="${fo.id}" ${F.fonte===fo.id?'selected':''}>${esc(fo.nome)}</option>`).join('')}<option value="" ${!F.fonte?'selected':''}>Não informado</option></select></div>`;
+  if (!F.pagamentos) return `<div><div class="flabel">${pago ? 'Pago com' : 'Vai pagar com'} ${fonteDe(F) ? seloHTML(fonteDe(F)) : ''}</div><select class="field" id="fFonte">${((trav(F.por)||{}).fontes||[]).map(fo=>`<option value="${fo.id}" ${F.fonte===fo.id?'selected':''}>${esc(fo.nome)}</option>`).join('')}<option value="" ${!F.fonte?'selected':''}>Não informado</option></select></div>`;
   autoPagamentos();
   const total = parseFloat(String(F.valor ?? '').replace(',','.')) || 0;
   const cadaUmSuaParte = F.pagamentos.every(pg => Math.abs((+pg.valor || 0) - parteForm(pg.por, total)) < 0.01);
   const [cls, txt] = textoRestoPg();
   return `<div class="flabel">${pago ? 'Quanto cada um pagou e com o quê' : 'Quanto cada um vai pagar e com o quê'}</div>
-    <div class="partes">${F.pagamentos.map(pg => `<div class="pgrow"><div class="quem">${av(pg.por)}${esc(nomeP(pg.por))}</div>
+    <div class="partes">${F.pagamentos.map(pg => `<div class="pgrow"><div class="quem">${av(pg.por)}${esc(nomeP(pg.por))} ${fonteObj(pg) ? seloHTML(fonteObj(pg)) : ''}</div>
       <input class="field num" inputmode="decimal" data-pgv="${pg.por}" value="${pg.valor === '' || pg.valor == null ? '' : (+pg.valor).toFixed(2).replace('.',',')}" placeholder="0,00">
       <select class="field" data-pgf="${pg.por}">${((trav(pg.por)||{}).fontes||[]).map(fo=>`<option value="${fo.id}" ${pg.fonte===fo.id?'selected':''}>${esc(fo.nome)}</option>`).join('')}<option value="" ${!pg.fonte?'selected':''}>Não informado</option></select></div>`).join('')}
       <div class="resto ${cls}" id="fPgResto">${txt}</div></div>
@@ -1226,6 +1280,8 @@ document.addEventListener('click', e => {
   if (q('.acerto[data-dev]')) { const [de, para] = q('.acerto[data-dev]').dataset.dev.split('|'); return abrirDividas(de, para); }
   if (q('[data-divida]')) { const l = S.lanc.find(x => x.id === q('[data-divida]').dataset.divida); const sb = l.moeda === S.viagem.nativa.cod ? S.viagem.nativa.simb : S.viagem.local.simb;
     return toast(dividasVisiveis(l, UI.pessoa).map(d => `${nomeP(d.de)} deve ${fmt(d.v, sb)} a ${nomeP(d.para)} nesta conta`).join(' · ') + '. Entra no Acerto entre vocês.'); }
+  if (q('[data-selo]')) { const [lid, por] = q('[data-selo]').dataset.selo.split('|'); const l = S.lanc.find(x => x.id === lid); const pg = l && pagtos(l).find(x => x.por === por); const fo = pg && fonteObj(pg);
+    return toast(fo ? `${nomeP(por)} · ${fo.nome}` : 'Meio de pagamento'); }
   if (q('[data-nopay]')) return toast('Meio de pagamento não definido. Abra o lançamento e escolha em "Vai pagar com".');
   if (q('.item')) return abrirForm(q('.item').dataset.id);
   if (q('[data-close]') || t.id==='scrim') return fecharSheet();
@@ -1321,7 +1377,7 @@ document.addEventListener('change', e => {
   if (t.id === 'hojeSim') { const n = parseInt(t.value, 10); S.viagem.hojeManual = n >= 0 ? Math.min(S.viagem.dias + 1, n) : null; save(); render(); toast(S.viagem.hojeManual == null ? 'Usando a data real' : 'Simulando o dia D' + S.viagem.hojeManual); }
   if (t.dataset.cfgt) { if (t.value.trim()) { S.viagem[t.dataset.cfgt] = t.value.trim(); save(); render(); toast('Ajuste salvo'); } }
   if (t.dataset.cfgn) { const n = parseInt(t.value, 10); if (n > 0 && n < 400) { S.viagem[t.dataset.cfgn] = n; save(); render(); toast('Ajuste salvo'); } }
-  if (t.id === 'fFonte') { lerCamposForm(); renderForm(); }
+  if (t.id === 'fFonte' || t.dataset.pgf) { lerCamposForm(); renderForm(); }
 });
 $('#cam').onchange = e => {
   const f = e.target.files[0]; if (!f) return;
