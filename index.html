@@ -383,7 +383,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.10.0';
+const VERSAO_APP = '1.10.1';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -505,6 +505,11 @@ function descConv(fo){
 }
 function fmt(v, simb){ return simb + ' ' + (v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 const pct = x => (x||0).toLocaleString('pt-BR',{maximumFractionDigits:2});
+function numBR(v){
+  if (typeof v === 'number') return v;
+  const t = String(v ?? '').trim().replace(/\s/g, ''); if (!t) return NaN;
+  return parseFloat(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t);
+}
 function fmt0(v, simb){ return fmt(v, simb); } // valores sempre com centavos exatos
 function emNativa(l){
   if (l.fatura) return l.fatura;
@@ -858,7 +863,7 @@ function editarFonte(p, id){
     $('#eMoeda').onclick = e => { const b = e.target.closest('[data-m]'); if (!b) return; ler(); E.moeda = b.dataset.m; desenhar(); };
     $('#voltaCart').onclick = () => abrirCarteira(p);
     $('#eOk').onclick = () => {
-      ler(); const num = x => parseFloat(String(x ?? '').replace(',','.'));
+      ler(); const num = x => numBR(String(x ?? ''));
       const valor = num(E.valor); if (!(valor >= 0) || E.valor === '' || E.valor == null) return toast('Digite o valor');
       const reg = {id: E.id || p + '-f' + Date.now().toString(36), nome: E.nome.trim() || TIPO_F[E.tipo].nome, tipo: E.tipo, moeda: E.moeda, valor, noOrcamento: E.tipo === 'credito' ? !!E.noOrcamento : undefined, sigla: (E._sigla || '').slice(0, 5) || undefined, cor: E._cor || undefined,
         cambio: E.moeda === sv.local.cod && num(E.cambio) > 0 ? num(E.cambio) : null, iof: E.moeda === sv.nativa.cod ? (num(E.iof) >= 0 ? num(E.iof) : sv.iofPadrao) : undefined};
@@ -1057,21 +1062,21 @@ function abrirForm(id){
 // parte de cada responsável no total do formulário (igual ou por valores)
 function parteForm(id, total){
   if (!F.resp.includes(id) || !(total > 0)) return 0;
-  if (F.partes) return parseFloat(String(F.partes[id] ?? '').replace(',','.')) || 0;
+  if (F.partes) return numBR(String(F.partes[id] ?? '')) || 0;
   return total / F.resp.length;
 }
 // valores automáticos dos pagamentos: cada pagador paga a sua parte; o que sobrar fica com o primeiro
 function autoPagamentos(){
   if (!F.pagamentos || !F._pgAuto) return;
-  const total = parseFloat(String(F.valor ?? '').replace(',','.')) || 0;
+  const total = numBR(String(F.valor ?? '')) || 0;
   const vals = F.pagamentos.map(pg => Math.round(parteForm(pg.por, total) * 100) / 100);
   const dif = Math.round((total - vals.reduce((a,b) => a + b, 0)) * 100) / 100;
   vals[0] = Math.round((vals[0] + dif) * 100) / 100;
   F.pagamentos.forEach((pg, i) => pg.valor = vals[i] > 0 ? vals[i] : 0);
 }
-function somaPg(){ return (F.pagamentos || []).reduce((a,pg) => a + (parseFloat(String(pg.valor ?? '').replace(',','.')) || 0), 0); }
+function somaPg(){ return (F.pagamentos || []).reduce((a,pg) => a + (numBR(String(pg.valor ?? '')) || 0), 0); }
 function textoRestoPg(){
-  const total = parseFloat(String(F.valor ?? '').replace(',','.')) || 0, r = Math.round((total - somaPg()) * 100) / 100;
+  const total = numBR(String(F.valor ?? '')) || 0, r = Math.round((total - somaPg()) * 100) / 100;
   const sb = F.moeda === S.viagem.nativa.cod ? S.viagem.nativa.simb : S.viagem.local.simb;
   return Math.abs(r) < 0.005 ? ['ok', 'Pagamentos somam o total ✓'] : r > 0 ? ['bad', 'Falta distribuir ' + fmt(r, sb)] : ['bad', 'Passou ' + fmt(-r, sb) + ' do total'];
 }
@@ -1079,22 +1084,22 @@ function blocoPagamentos(){
   const pago = F.status === 'realizado' || F.status === 'pago';
   if (!F.pagamentos) return `<div><div class="flabel">${pago ? 'Pago com' : 'Vai pagar com'} ${fonteDe(F) ? seloHTML(fonteDe(F)) : ''}</div><select class="field" id="fFonte">${((trav(F.por)||{}).fontes||[]).map(fo=>`<option value="${fo.id}" ${F.fonte===fo.id?'selected':''}>${esc(fo.nome)}</option>`).join('')}<option value="" ${!F.fonte?'selected':''}>Não informado</option></select></div>`;
   autoPagamentos();
-  const total = parseFloat(String(F.valor ?? '').replace(',','.')) || 0;
-  const cadaUmSuaParte = F.pagamentos.every(pg => Math.abs((+pg.valor || 0) - parteForm(pg.por, total)) < 0.01);
+  const total = numBR(String(F.valor ?? '')) || 0;
+  const cadaUmSuaParte = F.pagamentos.every(pg => Math.abs((numBR(pg.valor) || 0) - parteForm(pg.por, total)) < 0.01);
   const [cls, txt] = textoRestoPg();
   return `<div class="flabel">${pago ? 'Quanto cada um pagou e com o quê' : 'Quanto cada um vai pagar e com o quê'}</div>
     <div class="partes">${F.pagamentos.map(pg => `<div class="pgrow"><div class="quem">${av(pg.por)}${esc(nomeP(pg.por))} ${fonteObj(pg) ? seloHTML(fonteObj(pg)) : ''}</div>
-      <input class="field num" inputmode="decimal" data-pgv="${pg.por}" value="${pg.valor === '' || pg.valor == null ? '' : (+pg.valor).toFixed(2).replace('.',',')}" placeholder="0,00">
+      <input class="field num" inputmode="decimal" data-pgv="${pg.por}" value="${isNaN(numBR(pg.valor)) ? '' : numBR(pg.valor).toFixed(2).replace('.',',')}" placeholder="0,00">
       <select class="field" data-pgf="${pg.por}">${((trav(pg.por)||{}).fontes||[]).map(fo=>`<option value="${fo.id}" ${pg.fonte===fo.id?'selected':''}>${esc(fo.nome)}</option>`).join('')}<option value="" ${!pg.fonte?'selected':''}>Não informado</option></select></div>`).join('')}
       <div class="resto ${cls}" id="fPgResto">${txt}</div></div>
     <div class="hint">${cadaUmSuaParte ? 'Cada um paga a sua parte: não gera acerto entre vocês.' : 'Quem pagar mais que a sua parte fica com crédito no Acerto entre vocês.'} A forma de pagamento de cada um pode ser escolhida depois, no celular de cada um, e sincronizada.</div>`;
 }
 function fontePadrao(p){ if (!p) return null; const fs = (trav(p)||{}).fontes || []; const u = (S.ultFonte||{})[p]; if (u && fs.some(x => x.id === u)) return u; const d = fs.find(x => x.tipo !== 'credito') || fs[0]; return d ? d.id : null; }
 function respPadrao(c){ return respPorRegra(cat(c).regra); }
-function somaPartes(){ return F.resp.reduce((a,id) => a + (parseFloat(String((F.partes||{})[id] ?? '').replace(',','.')) || 0), 0); }
+function somaPartes(){ return F.resp.reduce((a,id) => a + (numBR(String((F.partes||{})[id] ?? '')) || 0), 0); }
 function blocoDivisao(){
   if (F.resp.length < 2) return '<div class="hint">Toque em mais de um nome para dividir o valor.</div>';
-  const porValores = !!F.partes, n = parseFloat(String(F.valor??'').replace(',','.')) || 0;
+  const porValores = !!F.partes, n = numBR(String(F.valor??'')) || 0;
   const sb = F.moeda===S.viagem.nativa.cod ? S.viagem.nativa.simb : S.viagem.local.simb;
   let h = `<div class="segl" id="fModo" style="margin-top:10px"><button data-modo="igual" class="${!porValores?'on':''}">Dividir igual</button><button data-modo="valores" class="${porValores?'on':''}">Por valores</button></div>`;
   if (!porValores) return h + `<div class="hint">${F.resp.length} pessoas: ${fmtParte()} para cada um.</div>`;
@@ -1104,10 +1109,10 @@ function blocoDivisao(){
     <div class="resto ${Math.abs(resto) < 0.005 ? 'ok' : 'bad'}" id="fResto">${Math.abs(resto) < 0.005 ? 'Tudo distribuído ✓' : resto > 0 ? 'Falta distribuir ' + fmt(resto, sb) : 'Passou ' + fmt(-resto, sb) + ' do total'}</div></div>
     <div class="hint">Use para contas de restaurante em que cada um consumiu um valor. Taxa e gorjeta: some na parte de cada um.</div>`;
 }
-function fmtParte(){ const n = parseFloat(String(F.valor??'').replace(',','.')); if (!(n>0)) return 'a mesma parte'; const sb = F.moeda===S.viagem.nativa.cod?S.viagem.nativa.simb:S.viagem.local.simb; return fmt(n/F.resp.length, sb); }
+function fmtParte(){ const n = numBR(String(F.valor??'')); if (!(n>0)) return 'a mesma parte'; const sb = F.moeda===S.viagem.nativa.cod?S.viagem.nativa.simb:S.viagem.local.simb; return fmt(n/F.resp.length, sb); }
 function renderForm(){
   const v = S.viagem, c = F.cat ? cat(F.cat) : null;
-  const num = parseFloat(String(F.valor??'').replace(',','.'));
+  const num = numBR(String(F.valor??''));
   let conv = '';
   if (!isNaN(num) && num>0){
     const tmp = {...F, valor:num, fatura:null};
@@ -1163,27 +1168,27 @@ function lerCamposForm(){
   if (g('fFonte')) F.fonte = g('fFonte').value || null;
   if (g('fFatura')) F.fatura = g('fFatura').value;
   document.querySelectorAll('[data-parte]').forEach(i => { F.partes[i.dataset.parte] = i.value; });
-  document.querySelectorAll('[data-pgv]').forEach(i => { const pg = F.pagamentos && F.pagamentos.find(x => x.por === i.dataset.pgv); if (pg) pg.valor = i.value; });
+  document.querySelectorAll('[data-pgv]').forEach(i => { const pg = F.pagamentos && F.pagamentos.find(x => x.por === i.dataset.pgv); if (pg) { const n = numBR(i.value); pg.valor = isNaN(n) ? '' : n; } });
   document.querySelectorAll('[data-pgf]').forEach(i => { const pg = F.pagamentos && F.pagamentos.find(x => x.por === i.dataset.pgf); if (pg) pg.fonte = i.value || null; });
 }
 function salvarForm(){
   lerCamposForm();
-  const valor = parseFloat(String(F.valor).replace(',','.'));
+  const valor = numBR(String(F.valor));
   if (!(valor > 0)) return toast('Digite o valor');
   if (!F.cat) return toast('Escolha a categoria');
   let partes = null;
   if (F.partes && F.resp.length > 1) {
     const soma = somaPartes();
     if (Math.abs(soma - valor) > 0.005) return toast(soma < valor ? 'Ainda falta distribuir parte do valor' : 'As partes passam do valor total');
-    partes = {}; F.resp.forEach(id => partes[id] = parseFloat(String(F.partes[id] ?? '').replace(',','.')) || 0);
+    partes = {}; F.resp.forEach(id => partes[id] = numBR(String(F.partes[id] ?? '')) || 0);
   }
   let pagamentos = null;
   if (F.pagamentos && F.pagamentos.length > 1) {
     const soma = Math.round(somaPg() * 100) / 100;
     if (Math.abs(soma - valor) > 0.005) return toast(soma < valor ? 'Os pagamentos ainda não somam o total' : 'Os pagamentos passam do total');
-    pagamentos = F.pagamentos.map(pg => ({ por: pg.por, fonte: pg.fonte || null, valor: parseFloat(String(pg.valor ?? '').replace(',','.')) || 0 }));
+    pagamentos = F.pagamentos.map(pg => ({ por: pg.por, fonte: pg.fonte || null, valor: numBR(String(pg.valor ?? '')) || 0 }));
   }
-  const fat = parseFloat(String(F.fatura??'').replace(',','.'));
+  const fat = numBR(String(F.fatura??''));
   const reg = {...F, partes, pagamentos, ...(pagamentos ? { por: pagamentos[0].por, fonte: null } : {}), valor, fatura: fat>0?fat:null, sub: F.sub || cat(F.cat).subs[0] || '', desc: F.desc.trim() || F.sub || cat(F.cat).nome};
   delete reg._mais; delete reg._pgAuto;
   if (pagamentos) { S.ultFonte ||= {}; for (const pg of pagamentos) if (pg.fonte) S.ultFonte[pg.por] = pg.fonte; }
@@ -1218,7 +1223,7 @@ function editarCategoria(id){
   $('#cCor').onclick = e => { const b = e.target.closest('[data-cor]'); if(!b) return; cor=b.dataset.cor; [...$('#cCor').children].forEach(x=>x.classList.toggle('on',x===b)); };
   $('#sheetIn').querySelectorAll('[data-delsub]').forEach(b => b.onclick = () => { c.subs.splice(+b.dataset.delsub,1); save(); editarCategoria(id); });
   $('#cOk').onclick = () => { c.nome = $('#cNome').value.trim() || c.nome; c.cor = cor; c.regra = $('#cRegra').value;
-    const o = parseFloat($('#cOrc').value.replace(',','.')); if (o>0) S.viagem.orcamento[id]=o; else delete S.viagem.orcamento[id];
+    const o = numBR($('#cOrc').value); if (o>0) S.viagem.orcamento[id]=o; else delete S.viagem.orcamento[id];
     save(); fecharSheet(); render(); };
 }
 
@@ -1354,24 +1359,24 @@ document.addEventListener('click', e => {
 document.addEventListener('input', e => {
   const t = e.target;
   if (F && F.pagamentos && (t.dataset.pgv || t.id === 'fValor' || t.dataset.parte)) {
-    if (t.dataset.pgv) { F._pgAuto = false; const pg = F.pagamentos.find(x => x.por === t.dataset.pgv); if (pg) pg.valor = t.value; }
+    if (t.dataset.pgv) { F._pgAuto = false; const pg = F.pagamentos.find(x => x.por === t.dataset.pgv); if (pg) { const v = numBR(t.value); pg.valor = isNaN(v) ? '' : v; } }
     else { if (t.id === 'fValor') F.valor = t.value; else F.partes[t.dataset.parte] = t.value;
       autoPagamentos(); document.querySelectorAll('[data-pgv]').forEach(i => { const pg = F.pagamentos.find(x => x.por === i.dataset.pgv); if (pg && F._pgAuto) i.value = (+pg.valor).toFixed(2).replace('.',','); }); }
     const el = $('#fPgResto'); if (el) { const [cls, txt] = textoRestoPg(); el.className = 'resto ' + cls; el.textContent = txt; }
   }
   if (t.dataset.parte || (t.id === 'fValor' && F && F.partes)) {
     if (t.dataset.parte) F.partes[t.dataset.parte] = t.value; else F.valor = t.value;
-    const el = $('#fResto'); if (el) { const n = parseFloat(String(F.valor??'').replace(',','.')) || 0, r = n - somaPartes();
+    const el = $('#fResto'); if (el) { const n = numBR(String(F.valor??'')) || 0, r = n - somaPartes();
       const sb = F.moeda===S.viagem.nativa.cod ? S.viagem.nativa.simb : S.viagem.local.simb;
       el.className = 'resto ' + (Math.abs(r) < 0.005 ? 'ok' : 'bad');
       el.textContent = Math.abs(r) < 0.005 ? 'Tudo distribuído ✓' : r > 0 ? 'Falta distribuir ' + fmt(r, sb) : 'Passou ' + fmt(-r, sb) + ' do total'; }
   }
-  if (t.id === 'fValor') { F.valor = t.value; const num = parseFloat(t.value.replace(',','.')); const v=S.viagem;
+  if (t.id === 'fValor') { F.valor = t.value; const num = numBR(t.value); const v=S.viagem;
     $('#fConv').textContent = num>0 ? (F.moeda===v.local.cod ? `≈ ${fmt(emNativa({...F,valor:num,fatura:null}),v.nativa.simb)} ${descConv(fonteDe(F))}` : `≈ ${fmt(num/v.cotacao,v.local.simb)}`) : ''; }
 });
 document.addEventListener('change', e => {
   const t = e.target;
-  if (t.dataset.cfg) { const [a,b] = t.dataset.cfg.split('.'); if (b) S.viagem[a][b] = t.value.trim(); else S.viagem[a] = parseFloat(t.value.replace(',','.')) || S.viagem[a]; save(); render(); toast('Ajuste salvo'); }
+  if (t.dataset.cfg) { const [a,b] = t.dataset.cfg.split('.'); if (b) S.viagem[a][b] = t.value.trim(); else S.viagem[a] = numBR(t.value) || S.viagem[a]; save(); render(); toast('Ajuste salvo'); }
   if (t.dataset.nomeP) { const v = trav(t.dataset.nomeP); v.nome = t.value.trim() || v.nome; save(); render(); toast('Nome salvo'); }
   if (t.id === 'aparelho') { S.aparelho = t.value; save(); render(); toast('Aparelho de ' + nomeP(t.value)); }
   if (t.id === 'hojeSim') { const n = parseInt(t.value, 10); S.viagem.hojeManual = n >= 0 ? Math.min(S.viagem.dias + 1, n) : null; save(); render(); toast(S.viagem.hojeManual == null ? 'Usando a data real' : 'Simulando o dia D' + S.viagem.hojeManual); }
@@ -1617,7 +1622,7 @@ function formNovaViagem(){
   abrirSheet();
   $('#nOk').onclick = () => {
     const g = id => $('#' + id).value.trim();
-    const cfg = { nome:g('nNome'), inicio:g('nIni'), dias:parseInt(g('nDias'),10), seuNome:g('nEu'), localCod:g('nLc'), localSimb:g('nLs'), nativaCod:g('nNc'), nativaSimb:g('nNs'), cotacao:parseFloat(g('nCot').replace(',','.')) };
+    const cfg = { nome:g('nNome'), inicio:g('nIni'), dias:parseInt(g('nDias'),10), seuNome:g('nEu'), localCod:g('nLc'), localSimb:g('nLs'), nativaCod:g('nNc'), nativaSimb:g('nNs'), cotacao:numBR(g('nCot')) };
     if (!cfg.nome || !cfg.inicio || !(cfg.dias > 0) || !cfg.seuNome || !(cfg.cotacao > 0)) return toast('Preencha todos os campos');
     S = novaViagem(cfg); S.aparelho = S.viagem.viajantes[0].id; save(); fecharSheet(); iniciar(); toast('Viagem criada');
   };
