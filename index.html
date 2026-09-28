@@ -301,6 +301,9 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .nopay{display:inline-flex;align-items:center;cursor:pointer;padding:2px;margin:-2px 0;border-radius:6px}
 .nopay svg{width:28px;height:24px;display:block}
 .nopay:active{background:var(--bad-soft)}
+.divida{display:inline-flex;align-items:center;cursor:pointer;padding:2px;margin:-2px 0;border-radius:6px}
+.divida svg{width:28px;height:26px;display:block}
+.divida:active{background:var(--warn-soft)}
 /* aviso de versão nova */
 .atualizar{position:fixed;left:12px;right:12px;bottom:calc(88px + env(safe-area-inset-bottom));z-index:70;max-width:456px;margin:0 auto;background:var(--brand);color:#fff;border-radius:14px;padding:12px 12px 12px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 8px 24px rgba(0,0,0,.25);font-size:14px}
 .atualizar span{flex:1}
@@ -363,7 +366,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.6.2';
+const VERSAO_APP = '1.7.0';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -445,6 +448,30 @@ function semFormaPgto(l, p){
   return pagtos(l).filter(pg => p === 't' || pg.por === p).some(pg => !pg.fonte);
 }
 const ICONE_SEM_PGTO = `<svg viewBox="0 0 30 26" aria-hidden="true"><g transform="rotate(-22 15 8)"><rect x="8.5" y="2" width="13" height="9" rx="1.3" fill="#36A474"/><circle cx="15" cy="6.5" r="2" fill="#fff" opacity=".9"/><circle cx="10.6" cy="6.5" r=".8" fill="#fff" opacity=".7"/><circle cx="19.4" cy="6.5" r=".8" fill="#fff" opacity=".7"/></g><rect x="2" y="8.5" width="21" height="14.5" rx="2.6" fill="var(--ink)"/><rect x="16.8" y="13.2" width="7.2" height="5.2" rx="2.4" fill="var(--ink)" stroke="var(--surface)" stroke-width="1.3"/><circle cx="19.6" cy="15.8" r="1" fill="var(--surface)"/><circle cx="24" cy="20.5" r="5.2" fill="var(--bad)" stroke="var(--surface)" stroke-width="1.6"/><path d="M22 18.5l4 4M26 18.5l-4 4" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/></svg>`;
+function dividaNoLanc(l){
+  const saldo = {};
+  for (const pg of pagtos(l)) saldo[pg.por] = (saldo[pg.por] || 0) + (+pg.valor || 0);
+  for (const id of l.resp) saldo[id] = (saldo[id] || 0) - l.valor * parte(l, id);
+  const dev = Object.entries(saldo).filter(([,x]) => x < -0.009).map(([id,x]) => [id,-x]);
+  const cre = Object.entries(saldo).filter(([,x]) => x > 0.009);
+  const out = []; let i = 0, j = 0;
+  while (i < dev.length && j < cre.length) {
+    const x = Math.min(dev[i][1], cre[j][1]);
+    if (x >= 0.01) out.push({ de: dev[i][0], para: cre[j][0], v: x });
+    dev[i][1] -= x; cre[j][1] -= x;
+    if (dev[i][1] < 0.009) i++; if (cre[j][1] < 0.009) j++;
+  }
+  return out;
+}
+function dividasVisiveis(l, p){ return dividaNoLanc(l).filter(d => p === 't' || d.de === p || d.para === p); }
+const ICONE_DIVIDA = `<svg viewBox="0 0 28 26" aria-hidden="true" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M7.4 8.6a6.8 6.8 0 0 1 11.8-3.5" stroke="var(--warn)" stroke-width="1.9"/><path d="M19.6 2.3l-.3 2.9-2.9-.4" stroke="var(--warn)" stroke-width="1.9"/>
+  <path d="M20.6 9.6a6.8 6.8 0 0 1-11.8 3.5" stroke="var(--warn)" stroke-width="1.9"/><path d="M8.4 15.9l.3-2.9 2.9.4" stroke="var(--warn)" stroke-width="1.9"/>
+  <circle cx="14" cy="9.1" r="4.3" fill="var(--warn)" stroke="none"/>
+  <path d="M15.4 7.4c-.3-.5-.8-.7-1.4-.7-.9 0-1.5.5-1.5 1.1 0 1.5 3 .8 3 2.4 0 .6-.6 1.1-1.5 1.1-.7 0-1.2-.3-1.5-.8M14 5.9v.8M14 11.6v.8" stroke="#fff" stroke-width="1.1"/>
+  <path d="M2.5 19.6h3l4.3-1.8c.8-.3 1.6-.3 2.4 0l3.4 1.3c.9.4.7 1.7-.3 1.7h-3.2" stroke="var(--ink)" stroke-width="1.6"/>
+  <path d="M12.1 20.8h5l5-2.8c.8-.5 1.8-.2 2.2.6.3.6.1 1.3-.5 1.7l-6 4H2.5" stroke="var(--ink)" stroke-width="1.6"/>
+</svg>`;
 function pgDe(l, p, id){ return pagtos(l).find(pg => pg.por === p && pg.fonte === id) || null; }
 // quantos R$ custa 1 unidade da moeda local, conforme a fonte usada
 function fatorNativa(fo){
@@ -830,7 +857,7 @@ function telaLista(){
       return `<div class="group"><div class="ghead"><span>${nomeDia(d)}</span><span class="num">${fmt(tot,sb)}</span></div>
       ${grupos[d].map(l=>{ const c=cat(l.cat); const v=val(l,p,UI.moedaVer); const vn = UI.moedaVer==='nativa'?emLocal(l)*parte(l,p):emNativa(l)*parte(l,p);
         return `<div class="item ${l.incluir?'':'off'}" data-id="${l.id}">${ic(c.icone,c.cor)}
-          <div><div class="t">${esc(l.desc)}</div>${l.obs && UI.busca ? `<div class="obs">${esc(l.obs)}</div>` : ''}<div class="m"><span class="st ${l.status}">${STN[l.status]}</span>${whoBadge(l)}<span>${esc(l.sub)}</span>${semFormaPgto(l, p) ? `<span class="nopay" data-nopay title="Meio de pagamento não definido" aria-label="Meio de pagamento não definido">${ICONE_SEM_PGTO}</span>` : ''}${(!isReal(l) || (pagtos(l).length===1 && l.resp.length===1 && l.resp[0]===l.por)) ? '' : `<span class="pagopor">· ${pagtos(l).length > 1 ? 'pago por ' + pagtos(l).map(pg => esc(nomeP(pg.por))).join(' e ') : 'pago por ' + esc(nomeP(l.por))}</span>`}</div></div>
+          <div><div class="t">${esc(l.desc)}</div>${l.obs && UI.busca ? `<div class="obs">${esc(l.obs)}</div>` : ''}<div class="m"><span class="st ${l.status}">${STN[l.status]}</span>${whoBadge(l)}<span>${esc(l.sub)}</span>${semFormaPgto(l, p) ? `<span class="nopay" data-nopay title="Meio de pagamento não definido" aria-label="Meio de pagamento não definido">${ICONE_SEM_PGTO}</span>` : ''}${dividasVisiveis(l, p).length ? `<span class="divida" data-divida="${l.id}" title="Conta dividida com acerto pendente" aria-label="Conta dividida com acerto pendente">${ICONE_DIVIDA}</span>` : ''}${(!isReal(l) || (pagtos(l).length===1 && l.resp.length===1 && l.resp[0]===l.por)) ? '' : `<span class="pagopor">· ${pagtos(l).length > 1 ? 'pago por ' + pagtos(l).map(pg => esc(nomeP(pg.por))).join(' e ') : 'pago por ' + esc(nomeP(l.por))}</span>`}</div></div>
           <div class="v num">${fmt(v,sb)}<small>${fmt0(vn, UI.moedaVer==='nativa'?S.viagem.local.simb:S.viagem.nativa.simb)}</small></div></div>`;}).join('')}</div>`; }).join('')
       : `<div class="empty">Nenhum lançamento com esses filtros.</div>`}`;
 }
@@ -1129,6 +1156,8 @@ document.addEventListener('click', e => {
   if (q('.due')) return abrirForm(q('.due').dataset.id);
   if (q('[data-st]')) { UI.filtroStatus = q('[data-st]').dataset.st; return render(); }
   if (q('[data-clr]')) { if (q('[data-clr]').dataset.clr==='cat') UI.filtroCat=null; else UI.filtroDia=null; return render(); }
+  if (q('[data-divida]')) { const l = S.lanc.find(x => x.id === q('[data-divida]').dataset.divida); const sb = l.moeda === S.viagem.nativa.cod ? S.viagem.nativa.simb : S.viagem.local.simb;
+    return toast(dividasVisiveis(l, UI.pessoa).map(d => `${nomeP(d.de)} deve ${fmt(d.v, sb)} a ${nomeP(d.para)} nesta conta`).join(' · ') + '. Entra no Acerto entre vocês.'); }
   if (q('[data-nopay]')) return toast('Meio de pagamento não definido. Abra o lançamento e escolha em "Vai pagar com".');
   if (q('.item')) return abrirForm(q('.item').dataset.id);
   if (q('[data-close]') || t.id==='scrim') return fecharSheet();
