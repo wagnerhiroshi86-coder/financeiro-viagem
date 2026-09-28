@@ -310,6 +310,10 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .atualizar button{border:0;border-radius:10px;padding:9px 14px;font-weight:700;background:var(--gold);color:#fff;cursor:pointer}
 :root[data-theme="dark"] .atualizar{background:#12302F}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .atualizar{background:#12302F}}
+.acerto .sub2{font-size:12px;color:var(--ink-3);margin-top:1px}
+.acerto .prevtag{font-size:10.5px;font-weight:700;color:var(--warn);background:var(--warn-soft);border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:2px}
+.acerto-net{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--brand-soft);font-size:13.5px}
+.acerto-net b{font-size:15px}
 .toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:13.5px;opacity:0;transition:.2s;z-index:60;pointer-events:none}
 .toast.on{opacity:1;transform:translateX(-50%)}
 </style>
@@ -366,7 +370,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.7.0';
+const VERSAO_APP = '1.8.0';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -612,6 +616,19 @@ function carteira(p){
   const credDisp = cred.reduce((a,x) => a + fonteVer(x.fo, x.resta), 0);
   return {fontes, din, cred, levado, resta, credDisp, precisa, jaGastou, folga: levado - precisa};
 }
+function dividasPorDirecao(){
+  const m = UI.moedaVer, hoje = diaAtual(), acc = {};
+  for (const l of ativos()) {
+    if (l.status === 'estimado' && l.dia >= 1 && l.dia < hoje) continue; // estimativa de dia que já passou
+    const base = m === 'nativa' ? emNativa(l) : emLocal(l);
+    for (const d of dividaNoLanc(l)) {
+      const k = d.de + '|' + d.para, x = base * d.v / l.valor;
+      acc[k] ||= { de: d.de, para: d.para, pago: 0, prev: 0 };
+      if (isReal(l)) acc[k].pago += x; else acc[k].prev += x;
+    }
+  }
+  return Object.values(acc).filter(x => x.pago + x.prev >= 0.01).sort((a, b) => (b.pago + b.prev) - (a.pago + a.prev));
+}
 function acerto(){
   // saldo de cada um = o que pagou − a parte que lhe cabe; depois, transferências mínimas
   const m = UI.moedaVer, bal = {};
@@ -786,7 +803,11 @@ function telaPainel(){
   const restDias = Math.max(1, S.viagem.dias - Math.max(1, hoje) + 1);
   const naViagem = hoje >= 1 && hoje <= S.viagem.dias;
   const cats = porCategoria(p).sort((a,b)=>Math.max(b.plano,b.real)-Math.max(a.plano,a.real));
-  const ac = acerto();
+  const dv = dividasPorDirecao();
+  // compensação só quando duas pessoas devem uma à outra
+  const nets = []; const vistos = new Set();
+  for (const x of dv) { const k = [x.de, x.para].sort().join('|'); if (vistos.has(k)) continue; const volta = dv.find(y => y.de === x.para && y.para === x.de);
+    if (volta) { vistos.add(k); const a = x.pago + x.prev, b = volta.pago + volta.prev; if (Math.abs(a - b) >= 0.01) nets.push(a > b ? {de:x.de, para:x.para, v:a-b} : {de:x.para, para:x.de, v:b-a}); } }
   const due = ativos().filter(l => l.status==='apagar' && l.dia>=hoje && parte(l,p)).sort((a,b)=>a.dia-b.dia).slice(0,4);
   return topo() + `<div class="wrap">
     <section class="card hero">
@@ -812,10 +833,11 @@ function telaPainel(){
     ${p==='t' ? cardDinheiroTodos() : cardCarteira(p)}
 
     ${p==='t' && S.viagem.viajantes.length > 1 ? `<section class="card"><h3>Acerto entre vocês <small>despesas divididas</small></h3>
-      ${ac.length ? ac.map(x => `<div class="acerto">${av(x.de)}<svg class="i arrow"><use href="#i-arrow"/></svg>${av(x.para)}
-        <div class="t">${esc(nomeP(x.de))} deve a ${esc(nomeP(x.para))}<b class="num">${fmt(x.v,sb)}</b></div></div>`).join('')
+      ${dv.length ? dv.map(x => `<div class="acerto">${av(x.de)}<svg class="i arrow"><use href="#i-arrow"/></svg>${av(x.para)}
+        <div class="t">${esc(nomeP(x.de))} deve a ${esc(nomeP(x.para))}${x.pago < 0.01 ? '<span class="prevtag">previsto</span>' : ''}<b class="num">${fmt(x.pago + x.prev, sb)}</b>${x.pago >= 0.01 && x.prev >= 0.01 ? `<div class="sub2 num">já pago ${fmt(x.pago, sb)} · previsto ${fmt(x.prev, sb)}</div>` : ''}</div></div>`).join('')
+        + nets.map(n => `<div class="acerto-net">Para acertar: <b>${esc(nomeP(n.de))} transfere ${fmt(n.v, sb)} a ${esc(nomeP(n.para))}</b></div>`).join('')
         : '<div class="acerto"><div class="t"><b>Tudo acertado</b></div></div>'}
-      <div class="hint">Calculado com o que já foi pago, considerando quem pagou e como cada gasto foi dividido.</div></section>` : ''}
+      <div class="hint">Soma, conta a conta, o que cada um pagou a mais que a sua parte. "Previsto" = contas estimadas ou a pagar; "já pago" = contas pagas.</div></section>` : ''}
 
     <section class="card"><h3>Por categoria <small>planejado × gasto</small></h3>
       ${cats.map(x=>{ const ref=Math.max(x.plano,x.orc||0,1); const over=x.real>x.plano+0.5;
