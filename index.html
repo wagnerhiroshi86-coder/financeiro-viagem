@@ -396,7 +396,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.13.3';
+const VERSAO_APP = '1.13.4';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -1433,7 +1433,8 @@ function baixarArquivo(file){ const a = document.createElement('a'); a.href = UR
 async function compartilharArquivo(){
   const file = arquivoDeDados(false, 'txt');
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: 'Financeiro da Viagem' }); toast('No outro celular: Ajustes → Juntar arquivo'); }
+    // só o arquivo: com título junto, o Quick Share da Samsung envia o título como texto e descarta o arquivo
+    try { await navigator.share({ files: [file] }); toast('No outro celular: Ajustes → Juntar arquivo'); }
     catch(e){ if (e.name !== 'AbortError') { baixarArquivo(file); toast('Arquivo salvo em Downloads'); } }
   } else { baixarArquivo(file); toast('Arquivo salvo em Downloads'); }
 }
