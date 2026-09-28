@@ -301,6 +301,12 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .nopay{display:inline-flex;align-items:center;cursor:pointer;padding:2px;margin:-2px 0;border-radius:6px}
 .nopay svg{width:27px;height:21px;display:block}
 .nopay:active{background:var(--bad-soft)}
+/* aviso de versão nova */
+.atualizar{position:fixed;left:12px;right:12px;bottom:calc(88px + env(safe-area-inset-bottom));z-index:70;max-width:456px;margin:0 auto;background:var(--brand);color:#fff;border-radius:14px;padding:12px 12px 12px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 8px 24px rgba(0,0,0,.25);font-size:14px}
+.atualizar span{flex:1}
+.atualizar button{border:0;border-radius:10px;padding:9px 14px;font-weight:700;background:var(--gold);color:#fff;cursor:pointer}
+:root[data-theme="dark"] .atualizar{background:#12302F}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .atualizar{background:#12302F}}
 .toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:13.5px;opacity:0;transition:.2s;z-index:60;pointer-events:none}
 .toast.on{opacity:1;transform:translateX(-50%)}
 </style>
@@ -357,7 +363,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.6.0';
+const VERSAO_APP = '1.6.1';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -1463,6 +1469,13 @@ function formNovaViagem(){
     S = novaViagem(cfg); S.aparelho = S.viagem.viajantes[0].id; save(); fecharSheet(); iniciar(); toast('Viagem criada');
   };
 }
+function avisarVersaoNova(){
+  if (document.querySelector('.atualizar')) return;
+  const b = document.createElement('div'); b.className = 'atualizar';
+  b.innerHTML = '<span>Nova versão do app disponível. Seus dados continuam como estão.</span><button>Atualizar</button>';
+  b.querySelector('button').onclick = () => location.reload();
+  document.body.appendChild(b);
+}
 function iniciar(){ document.querySelector('.nav').style.display = ''; render(); }
 
 (async () => {
@@ -1470,7 +1483,14 @@ function iniciar(){ document.querySelector('.nav').style.display = ''; render();
   if (d && d.viagem) { S = normalizar(d); iniciar(); if (!S.aparelho) perguntarDono(); }
   else telaBoasVindas();
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    // quando uma versão nova assume o controle, oferece atualizar (sem recarregar sozinho no meio de um lançamento)
+    const jaTinha = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (jaTinha) avisarVersaoNova(); });
+    navigator.serviceWorker.register('sw.js').then(r => r.update()).catch(() => {});
+    // ao voltar para o app (ele fica aberto em segundo plano no celular), procura versão nova de novo
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) navigator.serviceWorker.getRegistration().then(r => r && r.update()).catch(() => {}); });
+  }
 })();
 </script>
 </body>
