@@ -318,6 +318,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .acerto-net b{font-size:15px}
 /* selo do meio de pagamento: cor da instituição + sigla + tipo (Cred/Débt/Esp) */
 .selo{display:inline-flex;align-items:center;gap:3px;height:19px;padding:0 5px;border-radius:5px;background:var(--c);color:var(--t);font-size:10.5px;font-weight:800;letter-spacing:.2px;line-height:1;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(0,0,0,.14);white-space:nowrap}
+.selos{display:inline-flex;align-items:center;gap:4px;flex-wrap:nowrap;white-space:nowrap}
 .selo em{font-style:normal;font-weight:600;font-size:9.5px;opacity:.85}
 .selo .quem{min-width:15px;height:15px;padding:0 3px;border-radius:8px;display:inline-grid;place-items:center;font-size:8.5px;font-weight:800;color:#fff;margin-left:-3px;box-shadow:0 0 0 1.5px rgba(255,255,255,.85)}
 .selo-g{width:36px;height:36px;border-radius:10px;background:var(--c);color:var(--t);display:grid;place-items:center;align-content:center;font-weight:800;font-size:11px;line-height:1.05;text-align:center;box-shadow:inset 0 0 0 1px rgba(0,0,0,.14);flex:none}
@@ -383,7 +384,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.10.1';
+const VERSAO_APP = '1.11.0';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -564,9 +565,25 @@ const CORES_SELO = ['#1A1A1A','#F5C518','#820AD1','#FF7A00','#EC0000','#0B4AA2',
 function padraoSelo(fo){
   const n = (fo.nome || '').toLowerCase();
   if (fo.tipo === 'especie') return { sigla:'$', cor:'#2E7D4F' };
-  const regras = [[/nomad/,'NMD','#F5C518'],[/\bc6\b/,'C6','#1A1A1A'],[/wise/,'WISE','#9FE870'],[/nubank|\bnu\b/,'NU','#820AD1'],[/inter\b/,'INTER','#FF7A00'],
-    [/ita[uú]/,'ITAÚ','#FF7A00'],[/bradesco/,'BRAD','#EC0000'],[/santander/,'SAN','#EC0000'],[/banco do brasil|\bbb\b/,'BB','#F5C518'],[/caixa/,'CAIXA','#0B4AA2'],
-    [/revolut/,'REV','#0B4AA2'],[/\bxp\b/,'XP','#1A1A1A'],[/avenue/,'AVE','#0B4AA2'],[/btg/,'BTG','#0B4AA2']];
+  // cores aproximadas das marcas (sem logos); a ordem importa: nomes mais específicos primeiro
+  const regras = [
+    // contas globais / câmbio
+    [/nomad/,'NMD','#F5C518'],[/wise/,'WISE','#9FE870'],[/revolut/,'REV','#0666EB'],[/\bn26\b/,'N26','#36A18B'],[/paypal/,'PAYPAL','#003087'],
+    [/payoneer/,'PAYON','#FF4800'],[/avenue/,'AVE','#0B4AA2'],[/\bmonzo\b/,'MONZO','#FF4F40'],
+    // Brasil
+    [/\bc6\b/,'C6','#1A1A1A'],[/nubank|\bnu\b/,'NU','#820AD1'],[/banco inter|\binter\b/,'INTER','#FF7A00'],[/ita[uú]/,'ITAÚ','#EC7000'],
+    [/bradesco/,'BRAD','#CC092F'],[/santander/,'SAN','#EC0000'],[/banco do brasil|\bbb\b/,'BB','#F5C518'],[/caixa/,'CAIXA','#0070AF'],
+    [/\bbtg\b/,'BTG','#0B2B4B'],[/\bxp\b/,'XP','#1A1A1A'],[/picpay/,'PIC','#21C25E'],[/mercado ?pago/,'MP','#00B1EA'],[/pagbank|pagseguro/,'PAG','#00A868'],
+    [/\bnext\b/,'NEXT','#00C853'],[/\bneon\b/,'NEON','#00B7EB'],[/sicredi/,'SICR','#33A02C'],[/sicoob/,'SICO','#003641'],[/banrisul/,'BANRI','#005CA9'],
+    [/safra/,'SAFRA','#0B2A55'],[/banco original|\boriginal\b/,'ORIG','#00A859'],[/\bwill\b/,'WILL','#FFD500'],[/\bbs2\b/,'BS2','#0033A0'],
+    // Estados Unidos
+    [/bank of america|\bbofa\b/,'BOFA','#E31837'],[/\bchase\b/,'CHASE','#117ACA'],[/wells fargo/,'WELLS','#D71E28'],[/\bciti/,'CITI','#056DAE'],
+    [/capital one/,'CAP1','#004977'],[/american express|\bamex\b/,'AMEX','#2E77BC'],[/discover/,'DISC','#FF6000'],[/\bus bank\b|u\.s\. bank/,'USB','#0C2074'],
+    [/\bpnc\b/,'PNC','#EF7622'],[/\btd\b/,'TD','#34A853'],[/schwab/,'SCHW','#00A0DF'],[/truist/,'TRUIST','#2E1A47'],[/\bally\b/,'ALLY','#650360'],
+    // Europa e outros
+    [/hsbc/,'HSBC','#DB0011'],[/barclays/,'BARC','#00AEEF'],[/\bing\b/,'ING','#FF6200'],[/bnp/,'BNP','#00965E'],[/deutsche/,'DB','#0018A8'],
+    [/millennium/,'MILL','#D1005D'],[/scotiabank/,'SCOTIA','#EC111A'],[/bbva/,'BBVA','#004481']
+  ];
   for (const [re, sg, cor] of regras) if (re.test(n)) return { sigla:sg, cor };
   const w = (fo.nome || '?').trim().split(/\s+/);
   return { sigla: (w[0] || '?').slice(0, 4).toUpperCase(), cor:'#6B7280' };
@@ -983,7 +1000,7 @@ function telaLista(){
       return `<div class="group"><div class="ghead"><span>${nomeDia(d)}</span><span class="num">${fmt(tot,sb)}</span></div>
       ${grupos[d].map(l=>{ const c=cat(l.cat); const v=val(l,p,UI.moedaVer); const vn = UI.moedaVer==='nativa'?emLocal(l)*parte(l,p):emNativa(l)*parte(l,p);
         return `<div class="item ${l.incluir?'':'off'}" data-id="${l.id}">${ic(c.icone,c.cor)}
-          <div><div class="t">${esc(l.desc)}</div>${l.obs && UI.busca ? `<div class="obs">${esc(l.obs)}</div>` : ''}<div class="m"><span class="st ${l.status}">${STN[l.status]}</span>${whoBadge(l)}<span>${esc(l.sub)}</span>${pagtos(l).filter(pg => (p === 't' || pg.por === p) && fonteObj(pg)).map(pg => seloHTML(fonteObj(pg), p === 't' ? pg.por : null, `data-selo="${l.id}|${pg.por}" title="${esc(nomeP(pg.por) + ' · ' + fonteObj(pg).nome)}"`)).join('')}${semFormaPgto(l, p) ? `<span class="nopay" data-nopay title="Meio de pagamento não definido" aria-label="Meio de pagamento não definido">${ICONE_SEM_PGTO}</span>` : ''}${dividasVisiveis(l, p).length ? `<span class="divida" data-divida="${l.id}" title="Conta dividida com acerto pendente" aria-label="Conta dividida com acerto pendente">${ICONE_DIVIDA}</span>` : ''}${(!isReal(l) || (pagtos(l).length===1 && l.resp.length===1 && l.resp[0]===l.por)) ? '' : `<span class="pagopor">· ${pagtos(l).length > 1 ? 'pago por ' + pagtos(l).map(pg => esc(nomeP(pg.por))).join(' e ') : 'pago por ' + esc(nomeP(l.por))}</span>`}</div></div>
+          <div><div class="t">${esc(l.desc)}</div>${l.obs && UI.busca ? `<div class="obs">${esc(l.obs)}</div>` : ''}<div class="m"><span class="st ${l.status}">${STN[l.status]}</span>${whoBadge(l)}<span>${esc(l.sub)}</span>${(() => { const partes = pagtos(l).filter(pg => (p === 't' || pg.por === p) && fonteObj(pg)).map(pg => seloHTML(fonteObj(pg), p === 't' ? pg.por : null, `data-selo="${l.id}|${pg.por}" title="${esc(nomeP(pg.por) + ' · ' + fonteObj(pg).nome)}"`)).join(''); return partes ? `<span class="selos">${partes}</span>` : ''; })()}${semFormaPgto(l, p) ? `<span class="nopay" data-nopay title="Meio de pagamento não definido" aria-label="Meio de pagamento não definido">${ICONE_SEM_PGTO}</span>` : ''}${dividasVisiveis(l, p).length ? `<span class="divida" data-divida="${l.id}" title="Conta dividida com acerto pendente" aria-label="Conta dividida com acerto pendente">${ICONE_DIVIDA}</span>` : ''}${(!isReal(l) || (pagtos(l).length===1 && l.resp.length===1 && l.resp[0]===l.por)) ? '' : `<span class="pagopor">· ${pagtos(l).length > 1 ? 'pago por ' + pagtos(l).map(pg => esc(nomeP(pg.por))).join(' e ') : 'pago por ' + esc(nomeP(l.por))}</span>`}</div></div>
           <div class="v num">${fmt(v,sb)}<small>${fmt0(vn, UI.moedaVer==='nativa'?S.viagem.local.simb:S.viagem.nativa.simb)}</small></div></div>`;}).join('')}</div>`; }).join('')
       : `<div class="empty">Nenhum lançamento com esses filtros.</div>`}`;
 }
