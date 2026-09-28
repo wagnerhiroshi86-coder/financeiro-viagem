@@ -396,7 +396,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
    Offline (PWA). Os dados ficam só no aparelho (IndexedDB) e entram por arquivo.
    Este código não contém dados pessoais.
    ============================================================ */
-const VERSAO_APP = '1.13.1';
+const VERSAO_APP = '1.13.2';
 
 const CAT_DEF = [
   {id:'pass',  nome:'Passagens',            icone:'plane',  cor:'#3F6FB0', subs:['Aéreo','Taxas e bagagem']},
@@ -1385,7 +1385,8 @@ document.addEventListener('input', e => {
   const t = e.target;
   if (F && F.pagamentos && (t.dataset.pgv || t.id === 'fValor' || t.dataset.parte)) {
     if (t.dataset.pgv) { F._pgAuto = false; const pg = F.pagamentos.find(x => x.por === t.dataset.pgv); if (pg) { const v = numBR(t.value); pg.valor = isNaN(v) ? '' : v; } }
-    else { if (t.id === 'fValor') F.valor = t.value; else F.partes[t.dataset.parte] = t.value;
+    // mudou o valor total: por padrão redistribui os pagamentos (cada um paga a sua parte); depois dá para ajustar à mão
+    else { if (t.id === 'fValor') { F.valor = t.value; F._pgAuto = true; } else F.partes[t.dataset.parte] = t.value;
       autoPagamentos(); document.querySelectorAll('[data-pgv]').forEach(i => { const pg = F.pagamentos.find(x => x.por === i.dataset.pgv); if (pg && F._pgAuto) i.value = (+pg.valor).toFixed(2).replace('.',','); }); }
     const el = $('#fPgResto'); if (el) { const [cls, txt] = textoRestoPg(); el.className = 'resto ' + cls; el.textContent = txt; }
   }
